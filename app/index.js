@@ -44,11 +44,10 @@ export default function Home() {
     }
   }, [params]);
   
-  const handleDayPress = (date) => {
-    // Just store the selected date for other components
-    // The inline form is now handled directly by CalendarScreen
-    setSelectedDate(date);
-    setEndDate(date);
+  const handleDayPress = (date, startDate, endDate) => {
+    // Store the selected dates for other components
+    setSelectedDate(startDate || date);
+    setEndDate(endDate || date);
     setCurrentEvent(null);
     setIsEditing(false);
     
@@ -65,18 +64,30 @@ export default function Home() {
   };
   
   const handleEventPress = (event) => {
+    console.log('Event press called with:', event);
     setCurrentEvent(event);
     setShowEventDetails(true);
     setShowEventForm(false);
+    
+    // Force timeout to ensure state updates before rendering
+    setTimeout(() => {
+      console.log('Event details state - showEventDetails:', true, 'Event:', event.title);
+    }, 0);
   };
   
   const handleEditEvent = (event) => {
+    console.log('Edit event called with:', event);
     setCurrentEvent(event);
     setSelectedDate(event.date);
     setEndDate(event.date);
     setIsEditing(true);
     setShowEventForm(true);
     setShowEventDetails(false);
+    
+    // Force timeout to ensure state updates before rendering
+    setTimeout(() => {
+      console.log('Edit state after timeout - showEventForm:', true);
+    }, 0);
   };
   
   const handleDeleteEvent = (eventId, date) => {
@@ -109,6 +120,7 @@ export default function Home() {
   
   return (
     <>
+      {/* No need for header when using our custom web navbar */}
       {Platform.OS !== 'web' && <Stack.Screen options={{ headerShown: false }} />}
       
       <View style={styles.container}>
@@ -145,14 +157,14 @@ export default function Home() {
             </View>
           )
         ) : (
-          // On mobile, use a modal
+          // On mobile, use a modal with improved rendering
           <Modal
             visible={showEventForm}
-            animationType="slide"
-            transparent={false}
+            animationType="fade"
+            transparent={true}
             onRequestClose={handleCloseForm}
           >
-            <View style={styles.modalContainer}>
+            <View style={[styles.modalContainer, { backgroundColor: 'rgba(255, 255, 255, 1)' }]}>
               <View style={styles.modalHeader}>
                 <TouchableOpacity onPress={handleCloseForm} style={styles.backButton}>
                   <AntDesign name="arrowleft" size={24} color="#333" />
@@ -160,14 +172,16 @@ export default function Home() {
                 <Text style={styles.headerTitle}>{isEditing ? 'Edit Event' : 'New Event'}</Text>
                 <View style={styles.placeholder} />
               </View>
-              <EventFormScreen 
-                startDate={selectedDate}
-                endDate={endDate}
-                event={currentEvent}
-                events={events}
-                isEditing={isEditing}
-                onSave={handleEventSave}
-              />
+              {showEventForm && (
+                <EventFormScreen 
+                  startDate={selectedDate}
+                  endDate={endDate}
+                  event={currentEvent}
+                  events={events}
+                  isEditing={isEditing}
+                  onSave={handleEventSave}
+                />
+              )}
             </View>
           </Modal>
         )}
@@ -175,11 +189,11 @@ export default function Home() {
         {/* Event Details Modal */}
         <Modal
           visible={showEventDetails}
-          animationType="slide"
-          transparent={false}
+          animationType="fade"
+          transparent={true}
           onRequestClose={handleCloseDetails}
         >
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { backgroundColor: 'rgba(255, 255, 255, 1)' }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={handleCloseDetails} style={styles.backButton}>
                 <AntDesign name="arrowleft" size={24} color="#333" />

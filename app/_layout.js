@@ -1,76 +1,126 @@
-import React, { useEffect, useCallback } from 'react';
-import { Tabs } from 'expo-router';
-import { Platform, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Tabs, Slot, useRouter } from 'expo-router';
+import { Platform, StyleSheet, View, Text, TouchableOpacity, Dimensions, useWindowDimensions } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { AntDesign, Feather } from '@expo/vector-icons';
 import { requestNotificationPermissions, setupNotificationListener } from '../src/utils/alarmService';
-import * as SplashScreen from 'expo-splash-screen';
-import { LogBox } from 'react-native';
 
-// Ignore specific warnings that could be affecting Android
-LogBox.ignoreLogs([
-  'VirtualizedLists should never be nested',
-  'componentWillReceiveProps has been renamed',
-  'componentWillMount has been renamed'
-]);
-
-// Prevent the splash screen from auto-hiding
-SplashScreen.preventAutoHideAsync().catch(console.warn);
+// Web Navbar component with responsive design
+const WebNavbar = () => {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const [menuOpen, setMenuOpen] = useState(false);
+  
+  // Use small screen layout if screen width is less than 768px
+  const isSmallScreen = width < 768;
+  
+  const toggleMenu = () => {
+    setMenuOpen(!menuOpen);
+  };
+  
+  const navigateTo = (path) => {
+    router.push(path);
+    if (menuOpen) setMenuOpen(false);
+  };
+  
+  return (
+    <View style={styles.navbarContainer}>
+      <View style={styles.navbarContent}>
+        <Text style={styles.navbarLogo}>HomeTask</Text>
+        
+        {isSmallScreen ? (
+          // Hamburger menu for small screens
+          <TouchableOpacity onPress={toggleMenu} style={styles.menuButton}>
+            {menuOpen ? (
+              <Feather name="x" size={24} color="#333" />
+            ) : (
+              <Feather name="menu" size={24} color="#333" />
+            )}
+          </TouchableOpacity>
+        ) : (
+          // Regular navigation links for larger screens
+          <View style={styles.navLinks}>
+            <TouchableOpacity 
+              style={styles.navLink} 
+              onPress={() => navigateTo('/')}
+            >
+              <AntDesign name="calendar" size={20} color="#333" />
+              <Text style={styles.navLinkText}>Home</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.navLink} 
+              onPress={() => navigateTo('/schedules')}
+            >
+              <Feather name="list" size={20} color="#333" />
+              <Text style={styles.navLinkText}>My Schedules</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+      
+      {/* Dropdown menu for small screens */}
+      {isSmallScreen && menuOpen && (
+        <View style={styles.dropdownMenu}>
+          <TouchableOpacity 
+            style={styles.dropdownItem} 
+            onPress={() => navigateTo('/')}
+          >
+            <AntDesign name="calendar" size={20} color="#333" />
+            <Text style={styles.dropdownItemText}>Home</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.dropdownItem} 
+            onPress={() => navigateTo('/schedules')}
+          >
+            <Feather name="list" size={20} color="#333" />
+            <Text style={styles.dropdownItemText}>My Schedules</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+};
 
 // Only use expo-router for all app routing
 export default function AppLayout() {
-  const [appIsReady, setAppIsReady] = React.useState(false);
-
+  // Set up notifications
   useEffect(() => {
-    async function prepare() {
-      try {
-        // Initialize any important libraries or settings
-        const setupNotifications = async () => {
-          try {
-            const permissionsGranted = await requestNotificationPermissions();
-            console.log('Notification permissions granted:', permissionsGranted);
-          } catch (e) {
-            console.warn('Notification setup failed:', e);
-            // Continue anyway - non-critical feature
-          }
-        };
-        
-        await setupNotifications();
-        
-        // Artificial delay to ensure all rendering is complete
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (e) {
-        console.warn('Initialization error:', e);
-      } finally {
-        // Tell the application to render
-        setAppIsReady(true);
+    const setupNotifications = async () => {
+      const permissionsGranted = await requestNotificationPermissions();
+      console.log('Notification permissions granted:', permissionsGranted);
+    };
+    
+    setupNotifications();
+    
+    // Set up notification listener
+    const subscription = setupNotificationListener();
+    
+    // Clean up subscription on unmount
+    return () => {
+      if (subscription) {
+        subscription.remove();
       }
-    }
-
-    prepare();
+    };
   }, []);
 
-  const onLayoutRootView = useCallback(async () => {
-    if (appIsReady) {
-      // Hide the splash screen after all layout calculations are complete
-      await SplashScreen.hideAsync().catch(console.warn);
-    }
-  }, [appIsReady]);
-
-  if (!appIsReady) {
-    return null;
-  }
-
-  // Use platform-specific styling, but the same Tab navigator
-  const containerStyles = Platform.OS === 'web' 
-    ? styles.webContainer 
-    : styles.container;
-
   return (
-    <SafeAreaProvider onLayout={onLayoutRootView}>
+    <SafeAreaProvider>
       <StatusBar style="auto" />
-      <View style={containerStyles}>
+      {Platform.OS === 'web' ? (
+        <>
+          {/* Web layout with custom navbar */}
+          <View style={styles.webContainer}>
+            <WebNavbar />
+            <View style={styles.webContent}>
+              <Slot />
+            </View>
+          </View>
+        </>
+      ) : (
+        // Mobile layout with tab navigation
         <Tabs
           screenOptions={{
             headerStyle: { backgroundColor: '#f9f9f9' },
@@ -106,24 +156,86 @@ export default function AppLayout() {
             }}
           />
         </Tabs>
-      </View>
+      )}
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  // Mobile styles
   container: {
     flex: 1,
   },
+  // Web styles
   webContainer: {
     flex: 1,
-    maxWidth: 800, // Limit width on web
+    maxWidth: 1200,
     width: '100%',
-    alignSelf: 'center', // Center the app on web
-    height: '100vh', // Use viewport height on web
+    alignSelf: 'center',
+    height: '100vh',
     overflow: 'hidden',
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  webContent: {
+    flex: 1,
+    overflow: 'auto',
+  },
+  // Navbar styles
+  navbarContainer: {
+    width: '100%',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    backgroundColor: '#f9f9f9',
+    zIndex: 10,
+  },
+  navbarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  navbarLogo: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fada5e',
+  },
+  navLinks: {
+    flexDirection: 'row',
+  },
+  navLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 24,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 4,
+  },
+  navLinkText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#333',
+  },
+  menuButton: {
+    padding: 8,
+  },
+  dropdownMenu: {
+    width: '100%',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    backgroundColor: '#f9f9f9',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  dropdownItemText: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#333',
   },
 }); 

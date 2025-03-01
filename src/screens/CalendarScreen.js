@@ -42,6 +42,8 @@ const badgeColors = [
 
 export default function CalendarScreen({ params, router, onEventSave, onEventDetails, onEditEvent, onDayPress }) {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(null);  // Track the start date
+  const [endDate, setEndDate] = useState(null);      // Track the end date
   const [events, setEvents] = useState({});
   const [markedDates, setMarkedDates] = useState({});
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -50,6 +52,8 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
   const [selectedFormDate, setSelectedFormDate] = useState(null);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  // Add a flag to track if this is the first or second click
+  const [isFirstClick, setIsFirstClick] = useState(true);
   
   const scrollRef = useRef();
   const todayRef = useRef();
@@ -143,55 +147,79 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
       today: true
     };
     
-    // Mark dates with events and add event badges
+    // Mark dates with events
     Object.keys(eventData).forEach(date => {
-      if (eventData[date].length > 0) {
-        // Check if the date is in the past
-        const eventDate = new Date(date);
-        eventDate.setHours(0, 0, 0, 0);
+      if (eventData[date] && eventData[date].length > 0) {
+        const dots = [];
+        const periods = [];
         
-        // Create dots for each event on this date
-        const dots = eventData[date].map((event, idx) => ({
-          key: event.id,
-          color: getColorForEvent(event.id),
-          selectedDotColor: '#FFFFFF'
-        }));
-
-        // Create badges/periods for each event
-        const periods = eventData[date].map((event, idx) => ({
-          startingDay: true,
-          endingDay: true,
-          color: getColorForEvent(event.id) + '30', // Add transparency
-        }));
+        // Only add up to 3 dots/periods for the calendar
+        eventData[date].slice(0, Math.min(3, eventData[date].length)).forEach((event, index) => {
+          const color = getColorForEvent(event.id);
+          
+          dots.push({
+            key: event.id,
+            color: color,
+            selectedDotColor: '#000'
+          });
+          
+          periods.push({
+            startingDay: index === 0,
+            endingDay: index === eventData[date].length - 1 || index === 2,
+            color: color + '30'  // Add transparency
+          });
+        });
         
-        if (eventDate < todayDate) {
-          // Past date with events
-          marked[date] = { 
-            ...pastDates[date],
-            marked: true,
-            dots: dots,
-            periods: periods
-          };
-        } else {
-          // Current or future date with events
-          marked[date] = { 
-            ...marked[date],
-            marked: true,
-            dots: dots,
-            periods: periods
-          };
-        }
+        marked[date] = {
+          ...marked[date],
+          marked: true,
+          dots: dots,
+          periods: periods
+        };
       }
     });
 
-    // Mark selected date range
-    if (selectedDate) {
-      marked[selectedDate] = {
-        ...marked[selectedDate],
+    // Mark start and end date range
+    if (startDate) {
+      marked[startDate] = {
+        ...marked[startDate],
         selected: true,
-        selectedColor: highlightColors[0],
-        selectedTextColor: '#000'
+        startingDay: true,
+        color: highlightColors[0],
+        textColor: '#000'
       };
+    }
+
+    if (endDate && endDate !== startDate) {
+      marked[endDate] = {
+        ...marked[endDate],
+        selected: true,
+        endingDay: true,
+        color: highlightColors[0],
+        textColor: '#000'
+      };
+      
+      // Mark days in between start and end
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        // Add one day to avoid marking the start date again
+        const currentDate = new Date(start);
+        currentDate.setDate(currentDate.getDate() + 1);
+        
+        // Mark all dates between start and end
+        while (currentDate < end) {
+          const dateString = currentDate.toISOString().split('T')[0];
+          marked[dateString] = {
+            ...marked[dateString],
+            selected: true,
+            color: highlightColors[0],
+            textColor: '#000'
+          };
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
     }
 
     // Merge past dates last to ensure they don't override selections
@@ -207,6 +235,27 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
   const handleDayPress = (day) => {
     const dateString = day.dateString;
     setSelectedDate(dateString);
+    
+    // Handle start/end date logic
+    if (isFirstClick) {
+      // First click - set as start date
+      setStartDate(dateString);
+      setEndDate(dateString); // Initially end date is same as start
+      setIsFirstClick(false);
+    } else {
+      // Second click - set as end date if it's after the start date
+      const start = new Date(startDate);
+      const end = new Date(dateString);
+      
+      if (end >= start) {
+        setEndDate(dateString);
+      } else {
+        // If clicked on an earlier date, make it the new start
+        setStartDate(dateString);
+        // Don't change the end date
+      }
+      setIsFirstClick(true); // Reset to first click for next selection
+    }
     
     // Add a slight delay to ensure calendar renders properly
     setTimeout(() => {
@@ -230,7 +279,7 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
     
     // Also call onDayPress if provided (for any other functionality)
     if (onDayPress) {
-      onDayPress(dateString);
+      onDayPress(dateString, startDate, endDate);
     }
   };
 
@@ -540,17 +589,18 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
     return (
       <View style={styles.eventMarkersContainer}>
         {events[date].slice(0, 3).map((event, idx) => (
-          <View 
+          <TouchableOpacity 
             key={event.id} 
             style={[
               styles.eventMarker, 
               { backgroundColor: getColorForEvent(event.id) }
             ]}
+            onPress={() => handleEventPress(event)}
           >
             <Text style={styles.eventMarkerText}>
               {getTruncatedTitle(event.title, 10)}
             </Text>
-          </View>
+          </TouchableOpacity>
         ))}
         {events[date].length > 3 && (
           <Text style={styles.moreEventsText}>+{events[date].length - 3} more</Text>
@@ -570,10 +620,18 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
   };
   
   const handleInlineEventSave = (startDate, endDate, eventData) => {
-    // Save the event
-    handleEventSave(startDate, endDate, eventData);
+    // Get the actual start and end dates from our selection
+    const actualStartDate = startDate || selectedFormDate;
+    const actualEndDate = endDate || selectedFormDate;
+    
+    // Save the event with the actual start and end dates
+    handleEventSave(actualStartDate, actualEndDate, eventData);
+    
     // Close the form
     setShowInlineForm(false);
+    
+    // Reset date selection state
+    setIsFirstClick(true);
   };
 
   // Filter out past events from display in the Created Events section
@@ -598,7 +656,55 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
         <Calendar
           onDayPress={handleDayPress}
           markedDates={markedDates}
-          markingType="multi-period"
+          markingType="multi-dot"
+          dayComponent={({ date, state }) => {
+            const dateString = date.dateString;
+            const dateEvents = events[dateString] || [];
+            const isSelected = dateString === selectedDate;
+            const isToday = dateString === new Date().toISOString().split('T')[0];
+            const isDisabled = state.disabled;
+            
+            return (
+              <View style={styles.dayComponentContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.dayButton,
+                    isSelected && { backgroundColor: highlightColors[0] },
+                    isToday && { borderColor: '#2196F3', borderWidth: 1 }
+                  ]}
+                  onPress={() => handleDayPress({ dateString })}
+                  disabled={isDisabled}
+                >
+                  <Text style={[
+                    styles.dayText,
+                    isDisabled && { color: '#c0c0c0' },
+                    isSelected && { color: '#000' },
+                    isToday && { color: '#2196F3' }
+                  ]}>
+                    {date.day}
+                  </Text>
+                </TouchableOpacity>
+                
+                {dateEvents.length > 0 && (
+                  <View style={styles.eventDotsContainer}>
+                    {dateEvents.slice(0, 3).map((event, idx) => (
+                      <TouchableOpacity
+                        key={event.id}
+                        style={[
+                          styles.eventDot,
+                          { backgroundColor: getColorForEvent(event.id) }
+                        ]}
+                        onPress={() => {
+                          console.log('Event dot clicked:', event.title);
+                          handleEventPress(event);
+                        }}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          }}
           theme={{
             todayTextColor: '#2196F3',
             todayBackgroundColor: '#e6f2ff',
@@ -657,12 +763,6 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
       <View style={styles.createdEventsSection}>
         <View style={styles.eventsSectionHeader}>
           <Text style={styles.sectionTitle}>Created Events</Text>
-          <TouchableOpacity 
-            style={styles.seeMoreButton}
-            onPress={() => router.push('/schedules')}
-          >
-            <Text style={styles.seeMoreText}>See More</Text>
-          </TouchableOpacity>
         </View>
         
         {displayEvents.length === 0 ? (
@@ -676,14 +776,12 @@ export default function CalendarScreen({ params, router, onEventSave, onEventDet
               style={styles.eventsList}
             />
             
-            {displayEvents.length > 5 && (
-              <TouchableOpacity
-                style={styles.viewAllButton}
-                onPress={() => router.push('/schedules')}
-              >
-                <Text style={styles.viewAllText}>View All Events</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.seeMoreButtonBottom}
+              onPress={() => router.push('/schedules')}
+            >
+              <Text style={styles.seeMoreTextBottom}>See More</Text>
+            </TouchableOpacity>
           </>
         )}
       </View>
@@ -781,16 +879,17 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#d3d3d3',
   },
-  seeMoreButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 16,
+  seeMoreButtonBottom: {
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f0f8ff',
+    borderRadius: 8,
+    marginTop: 8,
   },
-  seeMoreText: {
-    color: '#555',
-    fontWeight: '600',
-    fontSize: 14,
+  seeMoreTextBottom: {
+    color: '#2196F3',
+    fontSize: 16,
+    fontWeight: '500',
   },
   eventMarkersContainer: {
     position: 'absolute',
@@ -915,16 +1014,33 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 5,
   },
-  viewAllButton: {
+  dayComponentContainer: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
-    padding: 12,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 8,
-    marginTop: 8,
+    justifyContent: 'center',
   },
-  viewAllText: {
-    color: '#2196F3',
-    fontSize: 16,
-    fontWeight: '500',
+  dayButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  eventDotsContainer: {
+    flexDirection: 'row',
+    position: 'absolute',
+    bottom: -2,
+    justifyContent: 'center',
+  },
+  eventDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 1,
   },
 }); 

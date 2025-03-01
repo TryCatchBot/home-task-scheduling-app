@@ -4,6 +4,16 @@ import { isPastDate, formatAlarmSetting, formatDateToFriendly } from '../utils/e
 import { AntDesign, MaterialIcons, Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 
 export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicate, onAddNewEvent }) {
+  if (!event) {
+    return (
+      <View style={styles.containerWrapper}>
+        <View style={styles.container}>
+          <Text style={styles.errorText}>No event data available</Text>
+        </View>
+      </View>
+    );
+  }
+  
   const isPast = isPastDate(event.date);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -51,20 +61,32 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
 
   // Get color for event badge - this should match the logic in CalendarScreen
   const getEventColor = () => {
-    const index = Math.abs(event.id.split('-')[0]) % 10; // Match the number of colors in badgeColors
-    const badgeColors = [
-      '#4285F4', // Blue
-      '#EA4335', // Red
-      '#34A853', // Green
-      '#FBBC05', // Yellow
-      '#8F44AD', // Purple
-      '#16A085', // Teal
-      '#F39C12', // Orange
-      '#27AE60', // Emerald
-      '#E74C3C', // Crimson
-      '#3498DB', // Sky Blue
-    ];
-    return badgeColors[index];
+    // Add a check to ensure event.id exists
+    if (!event || !event.id) {
+      return '#4285F4'; // Default to blue if no id is available
+    }
+    
+    try {
+      const idPart = event.id.split('-')[0];
+      const index = Math.abs(parseInt(idPart) || 0) % 10; // Convert to number safely, default to 0 if NaN
+      const badgeColors = [
+        '#4285F4', // Blue
+        '#EA4335', // Red
+        '#34A853', // Green
+        '#FBBC05', // Yellow
+        '#8F44AD', // Purple
+        '#16A085', // Teal
+        '#F39C12', // Orange
+        '#27AE60', // Emerald
+        '#E74C3C', // Crimson
+        '#3498DB', // Sky Blue
+      ];
+      return badgeColors[index];
+    } catch (error) {
+      // If any error occurs during color calculation, return a default color
+      console.log('Error calculating event color:', error);
+      return '#4285F4'; // Default blue
+    }
   };
 
   return (
@@ -73,7 +95,7 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
         <View style={[styles.card, isPast && styles.pastCard, { borderLeftColor: getEventColor(), borderLeftWidth: 5 }]}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, isPast && styles.pastText]}>
-              {event.title}
+              {event.title || 'Untitled Event'}
             </Text>
             <TouchableOpacity
               style={styles.menuButton}
@@ -86,28 +108,28 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
           <View style={styles.detailRow}>
             <Text style={styles.label}>Date:</Text>
             <Text style={[styles.value, isPast && styles.pastText]}>
-              {formatDateToFriendly(event.date)}
+              {formatDateToFriendly(event.date) || 'No date specified'}
             </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.label}>Start Time:</Text>
             <Text style={[styles.value, isPast && styles.pastText]}>
-              {event.startTime}
+              {event.startTime || 'Not specified'}
             </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.label}>End Time:</Text>
             <Text style={[styles.value, isPast && styles.pastText]}>
-              {event.endTime}
+              {event.endTime || 'Not specified'}
             </Text>
           </View>
 
           <View style={styles.detailRow}>
             <Text style={styles.label}>Repeat:</Text>
             <Text style={[styles.value, isPast && styles.pastText]}>
-              {event.repeat.charAt(0).toUpperCase() + event.repeat.slice(1)}
+              {event.repeat ? (event.repeat.charAt(0).toUpperCase() + event.repeat.slice(1)) : 'None'}
             </Text>
           </View>
 
@@ -227,7 +249,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#efcc00',
+    color: '#333',
     flex: 1,
   },
   menuButton: {
@@ -289,6 +311,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    zIndex: 1000,
   },
   menuContainer: {
     backgroundColor: '#fff',
@@ -300,6 +323,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    zIndex: 1001,
   },
   menuItem: {
     flexDirection: 'row',
@@ -307,10 +331,17 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    zIndex: 1002,
   },
   menuItemText: {
     fontSize: 16,
     marginLeft: 16,
     color: '#333',
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 50,
   },
 }); 
