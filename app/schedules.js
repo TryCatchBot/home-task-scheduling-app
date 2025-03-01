@@ -51,6 +51,7 @@ export default function MySchedules() {
   };
   
   const handleEditEvent = (event) => {
+    console.log('Schedules screen - Edit event called with:', event);
     setCurrentEvent(event);
     setSelectedDate(event.date);
     setEndDate(event.date);
@@ -157,11 +158,11 @@ export default function MySchedules() {
         {/* Event Form Modal */}
         <Modal
           visible={showEventForm}
-          animationType="slide"
-          transparent={false}
+          animationType="fade"
+          transparent={true}
           onRequestClose={handleCloseForm}
         >
-          <View style={styles.modalContainer}>
+          <View style={[styles.modalContainer, { backgroundColor: 'rgba(255, 255, 255, 1)' }]}>
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={handleCloseForm} style={styles.backButton}>
                 <AntDesign name="arrowleft" size={24} color="#333" />
@@ -169,14 +170,16 @@ export default function MySchedules() {
               <Text style={styles.headerTitle}>{isEditing ? 'Edit Event' : 'New Event'}</Text>
               <View style={styles.placeholder} />
             </View>
-            <EventFormScreen 
-              startDate={selectedDate}
-              endDate={endDate}
-              event={currentEvent}
-              events={eventsMap}
-              isEditing={isEditing}
-              onSave={handleEventSave}
-            />
+            {showEventForm && (
+              <EventFormScreen 
+                startDate={selectedDate}
+                endDate={endDate}
+                event={currentEvent}
+                events={eventsMap}
+                isEditing={isEditing}
+                onSave={handleEventSave}
+              />
+            )}
           </View>
         </Modal>
       </View>

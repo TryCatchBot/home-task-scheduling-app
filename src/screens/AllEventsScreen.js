@@ -152,6 +152,11 @@ export default function AllEventsScreen({ events = [], router, onEventDetails, o
     
     // Get color for the event
     const getEventColor = () => {
+      // Add defense for undefined id
+      if (!item || !item.id) {
+        return '#4285F4'; // Default blue
+      }
+      
       const index = Math.abs(item.id.split('-')[0]) % 10;
       const badgeColors = [
         '#4285F4', // Blue
@@ -425,7 +430,7 @@ const styles = StyleSheet.create({
   },
   kebabMenu: {
     padding: 4,
-    zIndex: 11,
+    zIndex: 95, // Higher than backdrop but lower than dropdown
   },
   menuBackdrop: {
     position: 'absolute',
@@ -434,7 +439,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: 'transparent',
-    zIndex: 5,
+    zIndex: 90, // Make it higher than other elements but lower than dropdown
   },
   menuDropdown: {
     position: 'absolute',
@@ -449,7 +454,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 8,
-    zIndex: 11,
+    zIndex: 99, // Increase zIndex to ensure it's above other content
     borderWidth: 1,
     borderColor: '#e0e0e0',
     width: 160,

@@ -397,6 +397,25 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
     setIsFormValid(isValid);
   }, [eventForms]);
 
+  // Update useEffect to set form values when props change
+  useEffect(() => {
+    // Update form when external dates change
+    if (startDate || endDate) {
+      setEventForms(forms => {
+        const newForms = [...forms];
+        // Update the current form with new date values
+        if (newForms[currentIndex]) {
+          newForms[currentIndex] = {
+            ...newForms[currentIndex],
+            selectedStartDate: startDate || newForms[currentIndex].selectedStartDate,
+            selectedEndDate: endDate || newForms[currentIndex].selectedEndDate,
+          };
+        }
+        return newForms;
+      });
+    }
+  }, [startDate, endDate, currentIndex]);
+
   const formatTime = (date) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
@@ -556,71 +575,70 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
   };
 
   const handleSave = () => {
-    if (!isFormValid) return;
+    if (!isFormValid) {
+      Alert.alert('Error', 'Please complete all required fields');
+      return;
+    }
 
-    // Save each event
+    // Check for time conflicts
     for (const form of eventForms) {
-      const eventData = {
-        title: form.title.trim(),
-        startTime: formatTime(form.startTime),
-        endTime: formatTime(form.endTime),
-        repeat: form.repeat,
-        alarm: form.alarm,
-      };
-
-      if (isEditing && event?.id) {
-        eventData.id = event.id;
+      const startDate = form.selectedStartDate;
+      const endDate = form.selectedEndDate;
+      
+      // Generate dates between start and end
+      const start = new Date(startDate);
+      const end = new Date(endDate || startDate);
+      const dates = [];
+      
+      for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        dates.push(date.toISOString().split('T')[0]);
       }
-
-      // Check for time conflicts but don't block event creation
-      if (hasTimeConflict(events, eventData, form.selectedStartDate, isEditing ? event?.id : null)) {
-        // Show warning about conflict but allow creation
-        Alert.alert(
-          'Time Conflict Warning', 
-          `This event overlaps with an existing event. Create it anyway?`,
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-            {
-              text: 'Create Anyway',
-              onPress: () => {
-                // Save the event despite conflict
-                onSave(form.selectedStartDate, form.selectedEndDate || form.selectedStartDate, eventData);
-                
-                // Reset form if not editing
-                if (!isEditing) {
-                  setEventForms([initialEventForm]);
-                }
-                
-                // Close any open pickers/modals
-                setShowStartTimeModal(false);
-                setShowEndTimeModal(false);
-                setShowRepeatPicker(false);
-                setShowAlarmPicker(false);
-                setShowCalendarModal(false);
-              }
-            }
-          ]
-        );
-        return;
+      
+      // Check each date for conflicts
+      for (const date of dates) {
+        if (hasTimeConflict(events, 
+          { 
+            startTime: formatTime(form.startTime), 
+            endTime: formatTime(form.endTime) 
+          }, 
+          date, 
+          isEditing ? event?.id : null)
+        ) {
+          Alert.alert(
+            'Time Conflict',
+            `There is a time conflict on ${new Date(date).toDateString()} at ${formatTime(form.startTime)}`,
+            [{ text: 'OK' }]
+          );
+          return;
+        }
       }
-
-      onSave(form.selectedStartDate, form.selectedEndDate || form.selectedStartDate, eventData);
-    }
-    
-    // Reset form if not editing
-    if (!isEditing) {
-      setEventForms([initialEventForm]);
     }
 
-    // Close any open pickers/modals
-    setShowStartTimeModal(false);
-    setShowEndTimeModal(false);
-    setShowRepeatPicker(false);
-    setShowAlarmPicker(false);
-    setShowCalendarModal(false);
+    // Check if we're creating a recurring event over multiple dates
+    const eventData = eventForms[0];
+
+    // Prepare event data
+    const newEvent = {
+      title: eventData.title,
+      repeat: eventData.repeat,
+      alarm: eventData.alarm,
+      startTime: formatTime(eventData.startTime),
+      endTime: formatTime(eventData.endTime),
+    };
+
+    // If editing, keep the original ID
+    if (isEditing && event?.id) {
+      newEvent.id = event.id;
+    }
+
+    // Use form's start and end dates for creation
+    const startDateToUse = eventData.selectedStartDate;
+    const endDateToUse = eventData.selectedEndDate || eventData.selectedStartDate;
+
+    // Call onSave with the dates and event data
+    if (onSave) {
+      onSave(startDateToUse, endDateToUse, newEvent);
+    }
   };
 
   const renderTimePicker = (time, onChange, onConfirm) => (
