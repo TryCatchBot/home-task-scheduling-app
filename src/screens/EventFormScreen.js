@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,15 @@ import {
   Platform,
   Modal,
   Pressable,
-  ScrollView
+  ScrollView,
+  Switch
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { RepeatOptions, AlarmOptions, hasTimeConflict, formatAlarmSetting } from '../utils/eventUtils';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import CalendarPicker from 'react-native-calendar-picker';
+import { FontAwesome } from '@expo/vector-icons';
 
 // EventForm component to be reused for multiple events
 const EventForm = ({ 
@@ -38,97 +40,233 @@ const EventForm = ({
   currentIndex,
   setCurrentIndex,
   onRequestDateSelection,
-  isEditing
+  onAddEvent
 }) => {
   
+  // Add local state for alarm options modal
+  const [showAlarmOptionsModal, setShowAlarmOptionsModal] = useState(false);
+  
+  // Log the event data when the component mounts
+  useEffect(() => {
+    console.log(`EventForm ${index} received data:`, {
+      title: eventData.title,
+      selectedStartDate: eventData.selectedStartDate,
+      selectedEndDate: eventData.selectedEndDate,
+      startTime: formatTime(eventData.startTime),
+      endTime: formatTime(eventData.endTime),
+      repeat: eventData.repeat,
+      alarm: eventData.alarm,
+      id: eventData.id,
+    });
+  }, []);
+  
+  const handleInputChange = (field, value) => {
+    console.log(`Updating field ${field} to:`, value);
+    if (typeof onUpdate === 'function') {
+      onUpdate(index, { [field]: value });
+    } else {
+      console.error("onUpdate function not provided to EventForm component");
+    }
+  };
+
   const handleStartDatePress = () => {
-    setCurrentIndex(index);
-    if (onRequestDateSelection) {
+    if (typeof onRequestDateSelection === 'function') {
       onRequestDateSelection(index, 'start');
     } else {
-      setShowStartDatePicker(true);
+      console.error("onRequestDateSelection function not provided to EventForm component");
+      if (typeof setShowStartDatePicker === 'function') {
+        setShowStartDatePicker(true);
+      }
     }
   };
-  
+
   const handleEndDatePress = () => {
-    setCurrentIndex(index);
-    if (onRequestDateSelection) {
+    if (typeof onRequestDateSelection === 'function') {
       onRequestDateSelection(index, 'end');
     } else {
-      setShowEndDatePicker(true);
+      console.error("onRequestDateSelection function not provided to EventForm component");
+      if (typeof setShowEndDatePicker === 'function') {
+        setShowEndDatePicker(true);
+      }
     }
   };
-  
+
   const handleStartTimePress = () => {
-    setCurrentIndex(index);
-    setShowStartTimeModal(true);
+    if (typeof setShowStartTimeModal === 'function') {
+      setShowStartTimeModal(true);
+    }
+    if (typeof setCurrentIndex === 'function') {
+      setCurrentIndex(index);
+    }
   };
-  
+
   const handleEndTimePress = () => {
-    setCurrentIndex(index);
-    setShowEndTimeModal(true);
+    if (typeof setShowEndTimeModal === 'function') {
+      setShowEndTimeModal(true);
+    }
+    if (typeof setCurrentIndex === 'function') {
+      setCurrentIndex(index);
+    }
   };
-  
+
   const handleRepeatPress = () => {
-    setCurrentIndex(index);
-    setShowRepeatPicker(!showRepeatPicker && currentIndex === index);
+    if (typeof setShowRepeatPicker === 'function') {
+      setShowRepeatPicker(true);
+    }
+    if (typeof setCurrentIndex === 'function') {
+      setCurrentIndex(index);
+    }
   };
-  
+
   const handleAlarmPress = () => {
-    setCurrentIndex(index);
-    setShowAlarmPicker(!showAlarmPicker && currentIndex === index);
+    if (typeof setShowAlarmPicker === 'function') {
+      setShowAlarmPicker(true);
+    }
+    if (typeof setCurrentIndex === 'function') {
+      setCurrentIndex(index);
+    }
   };
-  
-  const handleRepeatChange = (value) => {
-    onUpdate(index, { ...eventData, repeat: value });
-    setShowRepeatPicker(false);
+
+  // Safely handle onRemove function call
+  const handleRemove = () => {
+    if (typeof onRemove === 'function') {
+      onRemove(index);
+    } else {
+      console.error("onRemove function not provided to EventForm component");
+    }
   };
-  
-  const handleAlarmChange = (value) => {
-    onUpdate(index, { ...eventData, alarm: value });
-    setShowAlarmPicker(false);
+
+  // Handles adding a new event form
+  const handleAdd = () => {
+    if (typeof onAddEvent === 'function') {
+      onAddEvent();
+    } else {
+      console.error("onAddEvent function not provided to EventForm component");
+    }
   };
-  
+
+  // Format date for display
   const formatDate = (dateString) => {
-    if (!dateString) return '';
+    if (!dateString) return 'Select date';
     return new Date(dateString).toLocaleDateString();
   };
 
+  // Format time for display
   const formatTime = (date) => {
-    if (!date) return '';
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+      return '00:00';
+    }
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 
-  const handleStartDateChange = (text) => {
-    try {
-      // Allow user to type date manually - basic validation
-      const date = new Date(text);
-      if (!isNaN(date.getTime())) {
-        onUpdate(index, { 
-          ...eventData, 
-          selectedStartDate: date.toISOString().split('T')[0] 
-        });
+  // Get UI color styles based on whether this form is currently selected
+  const getActiveStyles = () => {
+    const isActive = currentIndex === index;
+    return {
+      borderColor: isActive ? '#007AFF' : '#E0E0E0',
+      backgroundColor: isActive ? '#F0F8FF' : 'white',
+    };
+  };
+  
+  const handleRepeatChange = (value) => {
+    handleInputChange('repeat', value);
+    setShowRepeatPicker(false);
+  };
+  
+  const handleAlarmOptionsPress = () => {
+    setCurrentIndex(index);
+    setShowAlarmOptionsModal(true);
+  };
+  
+  const handleAlarmChange = (value) => {
+    handleInputChange('alarm', value);
+    setShowAlarmOptionsModal(false);
+  };
+
+  const handleCalendarDayPress = (selectedDate) => {
+    // Skip if trying to select a past date
+    const selectedDateObj = new Date(selectedDate);
+    const todayObj = new Date();
+    todayObj.setHours(0, 0, 0, 0);
+    
+    if (selectedDateObj < todayObj) {
+      Alert.alert('Error', 'Cannot select past dates');
+      return; // Don't allow selection of past dates
+    }
+    
+    // Convert the date to ISO string format and extract the date part
+    const dateString = selectedDateObj.toISOString().split('T')[0];
+    
+    const updatedForms = [...eventData];
+    const currentForm = { ...updatedForms[currentIndex] };
+    
+    if (currentField === 'start') {
+      currentForm.selectedStartDate = dateString;
+    } else if (currentField === 'end') {
+      // Validate end date is not before start date
+      if (new Date(currentForm.selectedStartDate) > selectedDateObj) {
+        Alert.alert('Error', 'End date cannot be before start date');
+        return;
       }
-    } catch (e) {
-      // Ignore invalid dates
+      currentForm.selectedEndDate = dateString;
+    }
+    
+    updatedForms[currentIndex] = currentForm;
+    handleInputChange('selectedStartDate', dateString);
+    handleInputChange('selectedEndDate', dateString);
+    handleInputChange('startTime', new Date(dateString));
+    handleInputChange('endTime', new Date(dateString));
+  };
+
+  const handleStartTimeChange = (event, selectedTime) => {
+    if (selectedTime) {
+      const updatedForms = [...eventData];
+      const currentForm = { ...updatedForms[currentIndex] };
+      
+      currentForm.startTime = selectedTime;
+      
+      // Ensure end time is after start time
+      if (selectedTime >= currentForm.endTime) {
+        const newEndTime = new Date(selectedTime);
+        newEndTime.setHours(selectedTime.getHours() + 1);
+        currentForm.endTime = newEndTime;
+      }
+      
+      updatedForms[currentIndex] = currentForm;
+      handleInputChange('startTime', selectedTime);
+      handleInputChange('endTime', currentForm.endTime);
     }
   };
 
-  const handleEndDateChange = (text) => {
-    try {
-      // Allow user to type date manually - basic validation
-      const date = new Date(text);
-      if (!isNaN(date.getTime())) {
-        onUpdate(index, { 
-          ...eventData, 
-          selectedEndDate: date.toISOString().split('T')[0] 
-        });
+  const handleEndTimeChange = (event, selectedTime) => {
+    if (selectedTime) {
+      const currentForm = eventData;
+      if (selectedTime <= currentForm.startTime) {
+        Alert.alert('Error', 'End time must be after start time');
+        return;
       }
-    } catch (e) {
-      // Ignore invalid dates
+      
+      const updatedForms = [...eventData];
+      updatedForms[currentIndex] = {
+        ...currentForm,
+        endTime: selectedTime
+      };
+      handleInputChange('endTime', selectedTime);
     }
   };
-  
+
+  const handleRequestDateSelection = (index, field) => {
+    setCurrentIndex(index);
+    setCurrentField(field);
+    
+    if (onRequestDateSelection) {
+      onRequestDateSelection(index, field);
+    } else {
+      // When in modal mode, show calendar in modal
+      setShowCalendarModal(true);
+    }
+  };
+
   // Platform-specific rendering for dropdowns
   const renderRepeatDropdown = () => {
     if (Platform.OS === 'web') {
@@ -137,7 +275,7 @@ const EventForm = ({
           <select 
             value={eventData.repeat}
             onChange={(e) => {
-              onUpdate(index, { ...eventData, repeat: e.target.value });
+              handleInputChange('repeat', e.target.value);
             }}
             className="webSelect"
             style={{
@@ -165,7 +303,7 @@ const EventForm = ({
           onPress={handleRepeatPress}
         >
           <Text style={styles.dropdownText}>
-            {eventData.repeat.charAt(0).toUpperCase() + eventData.repeat.slice(1)}
+            {eventData.repeat ? (eventData.repeat.charAt(0).toUpperCase() + eventData.repeat.slice(1)) : 'None'}
           </Text>
           <AntDesign 
             name={showRepeatPicker && currentIndex === index ? "up" : "down"} 
@@ -192,70 +330,87 @@ const EventForm = ({
     );
   }
   
-  const renderAlarmDropdown = () => {
-    if (Platform.OS === 'web') {
-      return (
-        <View style={styles.webSelectContainer}>
-          <select 
-            value={eventData.alarm}
-            onChange={(e) => {
-              onUpdate(index, { ...eventData, alarm: e.target.value });
-            }}
-            className="webSelect"
-            style={{
-              fontSize: '16px',
-              padding: '12px',
-              width: '100%',
-              borderRadius: '8px',
-              borderColor: '#ddd',
-              backgroundColor: 'white'
-            }}
-          >
-            <option value={AlarmOptions.NONE}>No Alarm</option>
-            <option value={AlarmOptions.AT_TIME}>At time of event</option>
-            <option value={AlarmOptions.FIVE_MIN}>5 minutes before</option>
-            <option value={AlarmOptions.FIFTEEN_MIN}>15 minutes before</option>
-            <option value={AlarmOptions.THIRTY_MIN}>30 minutes before</option>
-            <option value={AlarmOptions.ONE_HOUR}>1 hour before</option>
-            <option value={AlarmOptions.ONE_DAY}>1 day before</option>
-          </select>
-        </View>
-      );
+  const renderAlarmSection = () => {
+    const isAlarmOn = eventData.alarm !== AlarmOptions.NONE;
+    
+    // Only display alarm section if a title has been entered
+    if (!eventData.title || eventData.title.trim() === '') {
+      return null;
     }
     
     return (
       <>
+        <View style={styles.alarmSwitchRow}>
+          <Text style={styles.alarmSwitchLabel}>Alarm</Text>
+          <View style={styles.alarmSwitchContainer}>
+            {isAlarmOn && (
+              <Text style={styles.alarmOptionsText}>
+                {formatAlarmSetting(eventData.alarm)}
+              </Text>
+            )}
+            <Switch
+              trackColor={{ false: "#e0e0e0", true: "#fada5e" }}
+              thumbColor={isAlarmOn ? "#efc800" : "#f4f3f4"}
+              ios_backgroundColor="#e0e0e0"
+              onValueChange={handleAlarmPress}
+              value={isAlarmOn}
+            />
+          </View>
+        </View>
+        
         <TouchableOpacity
-          style={styles.dropdownSelector}
-          onPress={handleAlarmPress}
+          style={styles.createNewEventContainer}
+          onPress={handleAdd}
         >
-          <Text style={styles.dropdownText}>
-            {formatAlarmSetting(eventData.alarm)}
-          </Text>
-          <AntDesign 
-            name={showAlarmPicker && currentIndex === index ? "up" : "down"} 
-            size={16} 
-            color="#666" 
-          />
+          <AntDesign name="pluscircle" size={20} color="#efc800" />
+          <Text style={styles.createNewEventText}>Create New Event</Text>
         </TouchableOpacity>
         
-        {showAlarmPicker && currentIndex === index && (
-          <View style={styles.pickerContainer}>
-            <Picker
-              selectedValue={eventData.alarm}
-              onValueChange={handleAlarmChange}
-              style={styles.picker}
-            >
-              <Picker.Item label="No Alarm" value={AlarmOptions.NONE} />
-              <Picker.Item label="At time of event" value={AlarmOptions.AT_TIME} />
-              <Picker.Item label="5 minutes before" value={AlarmOptions.FIVE_MIN} />
-              <Picker.Item label="15 minutes before" value={AlarmOptions.FIFTEEN_MIN} />
-              <Picker.Item label="30 minutes before" value={AlarmOptions.THIRTY_MIN} />
-              <Picker.Item label="1 hour before" value={AlarmOptions.ONE_HOUR} />
-              <Picker.Item label="1 day before" value={AlarmOptions.ONE_DAY} />
-            </Picker>
-          </View>
-        )}
+        {/* Alarm Options Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={showAlarmOptionsModal}
+          onRequestClose={() => setShowAlarmOptionsModal(false)}
+        >
+          <Pressable 
+            style={styles.modalOverlay} 
+            onPress={() => setShowAlarmOptionsModal(false)}
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Alarm Options</Text>
+              
+              <ScrollView style={styles.alarmOptionsList}>
+                {Object.values(AlarmOptions).map((option) => (
+                  option !== AlarmOptions.NONE && (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.alarmOptionItem,
+                        eventData.alarm === option && styles.selectedAlarmOption
+                      ]}
+                      onPress={() => handleAlarmChange(option)}
+                    >
+                      <Text style={styles.alarmOptionText}>
+                        {formatAlarmSetting(option)}
+                      </Text>
+                      {eventData.alarm === option && (
+                        <AntDesign name="check" size={18} color="#efc800" />
+                      )}
+                    </TouchableOpacity>
+                  )
+                ))}
+              </ScrollView>
+              
+              <TouchableOpacity 
+                style={styles.closeIconButton}
+                onPress={() => setShowAlarmOptionsModal(false)}
+              >
+                <AntDesign name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
       </>
     );
   }
@@ -265,7 +420,7 @@ const EventForm = ({
       {index > 0 && (
         <TouchableOpacity 
           style={styles.removeEventButton} 
-          onPress={() => onRemove(index)}
+          onPress={handleRemove}
         >
           <View style={styles.closeIconContainer}>
             <AntDesign name="close" size={20} color="#ff4444" />
@@ -278,59 +433,73 @@ const EventForm = ({
         <TextInput
           style={styles.input}
           value={eventData.title}
-          onChangeText={(text) => onUpdate(index, { ...eventData, title: text })}
-          placeholder="Enter event name"
-          maxLength={50}
+          onChangeText={(text) => handleInputChange('title', text)}
+          placeholder="Enter event title"
+          modifiable={false}
         />
       </View>
 
       <View style={styles.dateTimeRow}>
-        <Text style={styles.inlineLabel}>Start:</Text>
-        <TouchableOpacity 
-          style={styles.dateTimeInput}
+        <Text style={styles.dateTimeLabel}>Start Date:</Text>
+        <TouchableOpacity
+          style={styles.datePickerButton}
           onPress={handleStartDatePress}
         >
           <TextInput
-            style={styles.dateText}
+            pointerEvents="none"
+            style={styles.dateInput}
             value={formatDate(eventData.selectedStartDate)}
-            onChangeText={handleStartDateChange}
-            placeholder="Date"
-            editable={true}
+            onChangeText={(text) => handleInputChange('selectedStartDate', text)}
+            placeholder="YYYY-MM-DD"
           />
-          <AntDesign name="calendar" size={20} color="#666" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.dateTimeInput}
-          onPress={handleStartTimePress}
-        >
-          <Text style={styles.timeText}>{formatTime(eventData.startTime)}</Text>
-          <Ionicons name="time-outline" size={20} color="#666" />
+          <FontAwesome name="calendar" size={20} color="#888" style={styles.calendarIcon} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.dateTimeRow}>
-        <Text style={styles.inlineLabel}>End:</Text>
-        <TouchableOpacity 
-          style={styles.dateTimeInput}
+        <Text style={styles.dateTimeLabel}>End Date:</Text>
+        <TouchableOpacity
+          style={styles.datePickerButton}
           onPress={handleEndDatePress}
         >
           <TextInput
-            style={styles.dateText}
+            pointerEvents="none"
+            style={styles.dateInput}
             value={formatDate(eventData.selectedEndDate)}
-            onChangeText={handleEndDateChange}
-            placeholder="Date"
-            editable={true}
+            onChangeText={(text) => handleInputChange('selectedEndDate', text)}
+            placeholder="YYYY-MM-DD"
           />
-          <AntDesign name="calendar" size={20} color="#666" />
+          <FontAwesome name="calendar" size={20} color="#888" style={styles.calendarIcon} />
         </TouchableOpacity>
+      </View>
 
+      <View style={styles.dateTimeRow}>
+        <Text style={styles.dateTimeLabel}>Start Time:</Text>
         <TouchableOpacity
-          style={styles.dateTimeInput}
+          style={styles.timePickerButton}
+          onPress={handleStartTimePress}
+        >
+          <Text style={styles.timeText}>
+            {eventData.startTime instanceof Date 
+              ? formatTime(eventData.startTime) 
+              : (typeof eventData.startTime === 'string' ? eventData.startTime : '00:00')}
+          </Text>
+          <FontAwesome name="clock-o" size={20} color="#888" style={styles.clockIcon} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.dateTimeRow}>
+        <Text style={styles.dateTimeLabel}>End Time:</Text>
+        <TouchableOpacity
+          style={styles.timePickerButton}
           onPress={handleEndTimePress}
         >
-          <Text style={styles.timeText}>{formatTime(eventData.endTime)}</Text>
-          <Ionicons name="time-outline" size={20} color="#666" />
+          <Text style={styles.timeText}>
+            {eventData.endTime instanceof Date 
+              ? formatTime(eventData.endTime) 
+              : (typeof eventData.endTime === 'string' ? eventData.endTime : '00:00')}
+          </Text>
+          <FontAwesome name="clock-o" size={20} color="#888" style={styles.clockIcon} />
         </TouchableOpacity>
       </View>
 
@@ -340,29 +509,42 @@ const EventForm = ({
       </View>
 
       <View style={styles.formRow}>
-        <Text style={styles.label}>Alarm:</Text>
-        {renderAlarmDropdown()}
+        {renderAlarmSection()}
       </View>
     </View>
   );
 };
 
-export default function EventFormScreen({ startDate, endDate, onSave, events, event, isEditing, onSelectDatesForEventIndex }) {
-  // State for the current event being edited
-  const initialEventForm = {
-    title: event?.title || '',
-    selectedStartDate: startDate || event?.date || '',
-    selectedEndDate: endDate || event?.date || '', // Initialize end date as well
-    startTime: event?.startTime ? parseTimeString(event.startTime) : new Date(),
-    endTime: event?.endTime ? parseTimeString(event.endTime) : new Date(new Date().setHours(new Date().getHours() + 1)),
-    repeat: event?.repeat || RepeatOptions.NONE,
-    alarm: event?.alarm || AlarmOptions.NONE,
-  };
+export default function EventFormScreen({ startDate, endDate, onSave, events, event, onSelectDatesForEventIndex, allowModification = false }) {
+  console.log("EventFormScreen rendering with event:", event);
+  
+  // Create a comprehensive initial form based on the event prop
+  const initialEventForm = useMemo(() => {
+    // Use all available data sources to create a complete initial form
+    return {
+      title: event?.title || '',
+      selectedStartDate: startDate || event?.startDate || event?.date || '',
+      selectedEndDate: endDate || event?.endDate || event?.date || '',
+      startTime: event?.startTime ? parseTimeString(event.startTime) : new Date(),
+      endTime: event?.endTime ? parseTimeString(event.endTime) : new Date(new Date().setHours(new Date().getHours() + 1)),
+      repeat: event?.repeat || RepeatOptions.NONE,
+      alarm: event?.alarm || AlarmOptions.NONE,
+      id: event?.id || null,
+      relatedDates: event?.relatedDates || []
+    };
+  }, [event, startDate, endDate]);
+  
+  // Ref to track initialization status to prevent unnecessary updates
+  const isInitializedRef = useRef(false);
   
   // State for managing multiple event forms
   const [eventForms, setEventForms] = useState([initialEventForm]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentField, setCurrentField] = useState(null); // 'start' or 'end'
+  
+  // State for selected dates from calendar
+  const [selectedDates, setSelectedDates] = useState(initialEventForm.relatedDates || []);
+  const [selectedFormDate, setSelectedFormDate] = useState(initialEventForm.selectedStartDate || null);
   
   // States for pickers and modals
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
@@ -376,12 +558,20 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
   // Form validation state
   const [isFormValid, setIsFormValid] = useState(false);
 
+  // Use a ref to store the last save timestamp to prevent multiple saves
+  const lastSaveTimeRef = useRef(0);
+
   // Parse time strings like "14:30" into Date objects
   function parseTimeString(timeStr) {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, minutes, 0, 0);
-    return date;
+    try {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes, 0, 0);
+      return date;
+    } catch (error) {
+      console.error("Error parsing time string:", error);
+      return new Date(); // Return current time as fallback
+    }
   }
 
   // Validate all forms
@@ -397,265 +587,209 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
     setIsFormValid(isValid);
   }, [eventForms]);
 
-  // Update useEffect to set form values when props change
+  // Initialize the form data only once using a ref flag
   useEffect(() => {
-    // Update form when external dates change
-    if (startDate || endDate) {
-      setEventForms(forms => {
-        const newForms = [...forms];
-        // Update the current form with new date values
-        if (newForms[currentIndex]) {
-          newForms[currentIndex] = {
-            ...newForms[currentIndex],
-            selectedStartDate: startDate || newForms[currentIndex].selectedStartDate,
-            selectedEndDate: endDate || newForms[currentIndex].selectedEndDate,
-          };
-        }
-        return newForms;
+    if (isInitializedRef.current) {
+      console.log("Form already initialized, skipping initialization");
+      return;
+    }
+    
+    console.log("Initializing form with event data:", event);
+    
+    // Only set the initial values when the component mounts
+    if (event) {
+      console.log("Setting form data from event:", event);
+      
+      // Make sure we have valid dates and times
+      const formData = {
+        title: event.title || '',
+        selectedStartDate: startDate || event.startDate || event.date || '',
+        selectedEndDate: endDate || event.endDate || event.date || '',
+        startTime: event.startTime ? parseTimeString(event.startTime) : new Date(),
+        endTime: event.endTime ? parseTimeString(event.endTime) : new Date(new Date().setHours(new Date().getHours() + 1)),
+        repeat: event.repeat || RepeatOptions.NONE,
+        alarm: event.alarm || AlarmOptions.NONE,
+        id: event.id
+      };
+      
+      console.log("Created form data:", formData);
+      setEventForms([formData]);
+      
+      // If the event has multiple dates, set them
+      if (event.relatedDates && Array.isArray(event.relatedDates)) {
+        setSelectedDates(event.relatedDates);
+      }
+      
+      isInitializedRef.current = true;
+    }
+  }, [event, startDate, endDate]); // Only depend on the necessary props
+
+  // Add a useEffect to log the state of the form after it's set up
+  useEffect(() => {
+    // Log when the form is ready with all data
+    if (eventForms.length > 0 && eventForms[0].title) {
+      console.log("EventFormScreen is ready with form data:", {
+        title: eventForms[0].title,
+        startDate: eventForms[0].selectedStartDate,
+        endDate: eventForms[0].selectedEndDate,
+        forms: eventForms.length
       });
     }
-  }, [startDate, endDate, currentIndex]);
+  }, [eventForms]);
 
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
-
-  const handleStartDateChange = (event, selectedDate) => {
-    setShowStartDatePicker(false);
-    setShowCalendarModal(false);
-    if (selectedDate) {
-      const dateString = selectedDate.toISOString().split('T')[0];
-      const updatedForms = [...eventForms];
-      const currentForm = { ...updatedForms[currentIndex] };
-      
-      currentForm.selectedStartDate = dateString;
-      
-      updatedForms[currentIndex] = currentForm;
-      setEventForms(updatedForms);
+  // Handle the saving of the event, with rate limiting to prevent infinite loop issues
+  const handleEventSave = async () => {
+    // Prevent multiple rapid executions of this function
+    const now = Date.now();
+    if (lastSaveTimeRef.current && (now - lastSaveTimeRef.current < 500)) {
+      console.log('Preventing multiple rapid save attempts');
+      return;
     }
-  };
-
-  const handleEndDateChange = (event, selectedDate) => {
-    setShowEndDatePicker(false);
-    setShowCalendarModal(false);
-    if (selectedDate) {
-      const currentForm = eventForms[currentIndex];
-      if (new Date(currentForm.selectedStartDate) > selectedDate) {
-        Alert.alert('Error', 'End date cannot be before start date');
-        return;
-      }
-      
-      const dateString = selectedDate.toISOString().split('T')[0];
-      const updatedForms = [...eventForms];
-      updatedForms[currentIndex] = {
-        ...currentForm,
-        selectedEndDate: dateString
-      };
-      setEventForms(updatedForms);
-    }
-  };
-
-  const handleCalendarDayPress = (selectedDate) => {
-    // Skip if trying to select a past date
-    const selectedDateObj = new Date(selectedDate);
-    const todayObj = new Date();
-    todayObj.setHours(0, 0, 0, 0);
+    lastSaveTimeRef.current = now;
     
-    if (selectedDateObj < todayObj) {
-      Alert.alert('Error', 'Cannot select past dates');
-      return; // Don't allow selection of past dates
-    }
-    
-    // Convert the date to ISO string format and extract the date part
-    const dateString = selectedDateObj.toISOString().split('T')[0];
-    
-    const updatedForms = [...eventForms];
-    const currentForm = { ...updatedForms[currentIndex] };
-    
-    if (currentField === 'start') {
-      currentForm.selectedStartDate = dateString;
-    } else if (currentField === 'end') {
-      // Validate end date is not before start date
-      if (new Date(currentForm.selectedStartDate) > selectedDateObj) {
-        Alert.alert('Error', 'End date cannot be before start date');
-        return;
-      }
-      currentForm.selectedEndDate = dateString;
-    }
-    
-    updatedForms[currentIndex] = currentForm;
-    setEventForms(updatedForms);
-    setShowCalendarModal(false);
-  };
+    console.log('handleEventSave called with:', {
+      eventFormsCount: eventForms.length,
+    });
 
-  const handleStartTimeChange = (event, selectedTime) => {
-    if (selectedTime) {
-      const updatedForms = [...eventForms];
-      const currentForm = { ...updatedForms[currentIndex] };
-      
-      currentForm.startTime = selectedTime;
-      
-      // Ensure end time is after start time
-      if (selectedTime >= currentForm.endTime) {
-        const newEndTime = new Date(selectedTime);
-        newEndTime.setHours(selectedTime.getHours() + 1);
-        currentForm.endTime = newEndTime;
-      }
-      
-      updatedForms[currentIndex] = currentForm;
-      setEventForms(updatedForms);
-    }
-  };
-
-  const handleEndTimeChange = (event, selectedTime) => {
-    if (selectedTime) {
-      const currentForm = eventForms[currentIndex];
-      if (selectedTime <= currentForm.startTime) {
-        Alert.alert('Error', 'End time must be after start time');
-        return;
-      }
-      
-      const updatedForms = [...eventForms];
-      updatedForms[currentIndex] = {
-        ...currentForm,
-        endTime: selectedTime
-      };
-      setEventForms(updatedForms);
-    }
-  };
-
-  const handleUpdateEvent = (index, updatedData) => {
-    const updatedForms = [...eventForms];
-    updatedForms[index] = updatedData;
-    setEventForms(updatedForms);
-  };
-
-  const handleRemoveEvent = (index) => {
-    const updatedForms = [...eventForms];
-    updatedForms.splice(index, 1);
-    setEventForms(updatedForms);
-  };
-
-  const handleAddEvent = () => {
-    // Clone the last event form as a template for the new one
-    const lastForm = eventForms[eventForms.length - 1];
-    
-    // Create a proper new form with Date objects for time fields
-    const newForm = {
-      title: '', // Clear the title for the new event
-      selectedStartDate: lastForm.selectedStartDate,
-      selectedEndDate: lastForm.selectedEndDate,
-      startTime: new Date(), // Create a new Date object for start time
-      endTime: new Date(new Date().setHours(new Date().getHours() + 1)), // Create a new Date object for end time
-      repeat: lastForm.repeat,
-      alarm: lastForm.alarm,
-    };
-    
-    const newIndex = eventForms.length;
-    setEventForms([...eventForms, newForm]);
-    
-    // Request to scroll to calendar for the new event
-    if (onSelectDatesForEventIndex) {
-      setTimeout(() => {
-        onSelectDatesForEventIndex(newIndex);
-      }, 100);
-    }
-  };
-
-  const handleRequestDateSelection = (index, field) => {
-    setCurrentIndex(index);
-    setCurrentField(field);
-    
-    if (onSelectDatesForEventIndex) {
-      onSelectDatesForEventIndex(index);
-    } else {
-      // When in Edit mode, show calendar in modal
-      setShowCalendarModal(true);
-    }
-  };
-
-  const handleSave = () => {
-    if (!isFormValid) {
-      Alert.alert('Error', 'Please complete all required fields');
+    // If no forms, do nothing
+    if (eventForms.length === 0) {
+      console.log("No event forms to save");
       return;
     }
 
-    // Check for time conflicts
-    for (const form of eventForms) {
-      const startDate = form.selectedStartDate;
-      const endDate = form.selectedEndDate;
+    // Keep track of required field validations for each form
+    const validations = [];
+    const invalidForms = [];
+
+    // Check each form for required fields
+    eventForms.forEach((form, index) => {
+      // Start with an empty validation object for this form
+      const validation = {};
       
-      // Generate dates between start and end
-      const start = new Date(startDate);
-      const end = new Date(endDate || startDate);
-      const dates = [];
-      
-      for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-        dates.push(date.toISOString().split('T')[0]);
+      // Check required fields
+      if (!form.title || form.title.trim() === '') {
+        validation.title = 'Title is required';
       }
       
-      // Check each date for conflicts
-      for (const date of dates) {
-        if (hasTimeConflict(events, 
-          { 
-            startTime: formatTime(form.startTime), 
-            endTime: formatTime(form.endTime) 
-          }, 
-          date, 
-          isEditing ? event?.id : null)
-        ) {
-          Alert.alert(
-            'Time Conflict',
-            `There is a time conflict on ${new Date(date).toDateString()} at ${formatTime(form.startTime)}`,
-            [{ text: 'OK' }]
-          );
-          return;
-        }
+      // Check date fields - use selectedDates if available
+      if (!form.selectedStartDate && !selectedFormDate && (!selectedDates || selectedDates.length === 0)) {
+        validation.startDate = 'Start date is required';
       }
+      
+      // Store the validation result for this form
+      validations.push(validation);
+      
+      // Track forms with missing required fields
+      if (Object.keys(validation).length > 0) {
+        invalidForms.push(index + 1); // Forms are 1-indexed for the user
+      }
+    });
+
+    // If any forms have validation issues, alert the user and don't save
+    if (invalidForms.length > 0) {
+      // Create a message that specifically identifies which forms have issues
+      const pluralForms = invalidForms.length > 1;
+      const formNumbers = invalidForms.join(', ');
+      const message = `Form${pluralForms ? 's' : ''} ${formNumbers} ${pluralForms ? 'have' : 'has'} missing required fields. Please complete all required fields (title and date).`;
+      Alert.alert('Required Fields Missing', message);
+      
+      // Update the validation state to show errors in the UI
+      setIsFormValid(false);
+      return;
     }
 
-    // Check if we're creating a recurring event over multiple dates
-    const eventData = eventForms[0];
+    // Call the save function safely
+    prepareSaveEvents();
+  };
 
-    // Prepare event data
-    const newEvent = {
-      title: eventData.title,
-      repeat: eventData.repeat,
-      alarm: eventData.alarm,
-      startTime: formatTime(eventData.startTime),
-      endTime: formatTime(eventData.endTime),
-    };
+  const prepareSaveEvents = () => {
+    // Prepare all event data with deep copies to prevent reference issues
+    const eventsToSave = eventForms.map(form => {
+      // Create a new object for each event to avoid reference issues
+      const eventCopy = {
+        ...form,
+        title: form.title,
+        repeat: form.repeat || 'none',
+        alarm: form.alarm || 'none',
+        startTime: formatTime(form.startTime ? new Date(form.startTime.getTime()) : new Date()),
+        endTime: formatTime(form.endTime ? new Date(form.endTime.getTime()) : new Date()),
+        date: form.selectedStartDate || selectedFormDate,
+        startDate: form.selectedStartDate || selectedFormDate,
+        endDate: form.selectedEndDate || form.selectedStartDate || selectedFormDate,
+      };
+      return eventCopy;
+    });
 
-    // If editing, keep the original ID
-    if (isEditing && event?.id) {
-      newEvent.id = event.id;
-    }
+    console.log(`Prepared ${eventsToSave.length} events to save with unique references`);
 
-    // Use form's start and end dates for creation
-    const startDateToUse = eventData.selectedStartDate;
-    const endDateToUse = eventData.selectedEndDate || eventData.selectedStartDate;
-
-    // Call onSave with the dates and event data
-    if (onSave) {
-      onSave(startDateToUse, endDateToUse, newEvent);
+    // If we're updating a single event, handle it directly
+    if (eventForms.length === 1) {
+      saveEvents(eventsToSave[0]);
+    } else {
+      // Otherwise, save all events at once
+      saveEvents(eventsToSave);
     }
   };
 
-  const renderTimePicker = (time, onChange, onConfirm) => (
-    <View style={styles.timePickerContainer}>
+  const saveEvents = (eventData) => {
+    try {
+      console.log("saveEvents called with:", typeof eventData, Array.isArray(eventData));
+      
+      // Create a deep copy of the event to avoid modifying the original
+      let eventsToSave;
+      
+      if (Array.isArray(eventData)) {
+        // Handle an array of events
+        eventsToSave = eventData.map(event => ({ ...event }));
+      } else if (typeof eventData === 'object' && eventData !== null) {
+        // Handle a single event object
+        eventsToSave = { ...eventData };
+        
+        // Ensure we preserve the ID when updating
+        if (event && event.id) {
+          eventsToSave.id = event.id;
+        }
+      } else {
+        // Invalid data type
+        console.error('Invalid event data format:', typeof eventData);
+        Alert.alert('Error', 'Invalid event data format. Please try again.');
+        return;
+      }
+      
+      // Use a setTimeout to ensure this happens after current execution completes
+      // This breaks the potential infinite loop by delaying the update
+      setTimeout(() => {
+        if (typeof onSave === 'function') {
+          // Pass the start and end dates along with the event data
+          const selectedEvent = Array.isArray(eventsToSave) ? eventsToSave[0] : eventsToSave;
+          const startDateToUse = selectedEvent.selectedStartDate || selectedEvent.date || startDate;
+          const endDateToUse = selectedEvent.selectedEndDate || selectedEvent.endDate || selectedEvent.date || endDate;
+          
+          console.log('Calling onSave with:', startDateToUse, endDateToUse, selectedEvent);
+          onSave(startDateToUse, endDateToUse, eventsToSave);
+        } else {
+          console.error('onSave is not a function or not provided');
+          Alert.alert('Error', 'Cannot save event data. Please try again.');
+        }
+      }, 0);
+      
+    } catch (error) {
+      console.error('Error in saveEvents:', error);
+      Alert.alert('Error', 'Failed to save event data. Please try again.');
+    }
+  };
+
+  const renderTimePicker = (time, onChange, onConfirm) => {
+    return (
       <DateTimePicker
         value={time}
         mode="time"
-        is24Hour={true}
         display="spinner"
         onChange={onChange}
         style={styles.timePicker}
       />
-      <TouchableOpacity style={styles.confirmButton} onPress={onConfirm}>
-        <Text style={styles.confirmButtonText}>Confirm</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -665,40 +799,71 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
             key={index}
             index={index}
             eventData={form}
-            onUpdate={handleUpdateEvent}
-            onRemove={handleRemoveEvent}
-            showStartDatePicker={showStartDatePicker}
-            showEndDatePicker={showEndDatePicker}
-            showStartTimeModal={showStartTimeModal}
-            showEndTimeModal={showEndTimeModal}
+            onUpdate={(i, data) => {
+              const updatedForms = [...eventForms];
+              updatedForms[i] = { ...updatedForms[i], ...data };
+              setEventForms(updatedForms);
+            }}
+            onRemove={(i) => {
+              const updatedForms = [...eventForms];
+              updatedForms.splice(i, 1);
+              setEventForms(updatedForms);
+            }}
+            showStartDatePicker={showStartDatePicker && currentIndex === index}
+            showEndDatePicker={showEndDatePicker && currentIndex === index}
+            showStartTimeModal={showStartTimeModal && currentIndex === index}
+            showEndTimeModal={showEndTimeModal && currentIndex === index}
             showRepeatPicker={showRepeatPicker}
             showAlarmPicker={showAlarmPicker}
-            setShowStartDatePicker={setShowStartDatePicker}
-            setShowEndDatePicker={setShowEndDatePicker}
-            setShowStartTimeModal={setShowStartTimeModal}
-            setShowEndTimeModal={setShowEndTimeModal}
-            setShowRepeatPicker={setShowRepeatPicker}
-            setShowAlarmPicker={setShowAlarmPicker}
+            setShowStartDatePicker={(value) => {
+              setShowStartDatePicker(value);
+              setCurrentIndex(index);
+            }}
+            setShowEndDatePicker={(value) => {
+              setShowEndDatePicker(value);
+              setCurrentIndex(index);
+            }}
+            setShowStartTimeModal={(value) => {
+              setShowStartTimeModal(value);
+              setCurrentIndex(index);
+            }}
+            setShowEndTimeModal={(value) => {
+              setShowEndTimeModal(value);
+              setCurrentIndex(index);
+            }}
+            setShowRepeatPicker={(value) => {
+              setShowRepeatPicker(value);
+              setCurrentIndex(index);
+            }}
+            setShowAlarmPicker={(value) => {
+              setShowAlarmPicker(value);
+              setCurrentIndex(index);
+            }}
             currentIndex={currentIndex}
-            setCurrentIndex={setCurrentIndex}
-            onRequestDateSelection={handleRequestDateSelection}
-            isEditing={isEditing}
+            setCurrentIndex={(value) => {
+              setCurrentIndex(value);
+            }}
+            onRequestDateSelection={(i, field) => {
+              setCurrentIndex(i);
+              setCurrentField(field);
+              if (onSelectDatesForEventIndex) {
+                onSelectDatesForEventIndex(i);
+              } else {
+                setShowCalendarModal(true);
+              }
+            }}
+            onAddEvent={() => {
+              handleAdd();
+            }}
           />
         ))}
-
-        {!isEditing && (
-          <TouchableOpacity
-            style={styles.createNewEventContainer}
-            onPress={handleAddEvent}
-          >
-            <AntDesign name="pluscircle" size={20} color="#2196F3" />
-            <Text style={styles.createNewEventText}>Create New Event</Text>
-          </TouchableOpacity>
-        )}
-
+        
         <TouchableOpacity
-          style={[styles.createButton, !isFormValid && styles.createButtonDisabled]}
-          onPress={handleSave}
+          style={[
+            styles.createButton, 
+            !isFormValid && styles.createButtonDisabled
+          ]}
+          onPress={handleEventSave}
           disabled={!isFormValid}
         >
           <AntDesign name="save" size={20} color="#fff" />
@@ -710,7 +875,20 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
             value={new Date(eventForms[currentIndex].selectedStartDate || new Date())}
             mode="date"
             display="default"
-            onChange={handleStartDateChange}
+            onChange={(event, selectedDate) => {
+              setShowStartDatePicker(false);
+              setShowCalendarModal(false);
+              if (selectedDate) {
+                const dateString = selectedDate.toISOString().split('T')[0];
+                const updatedForms = [...eventForms];
+                const currentForm = { ...updatedForms[currentIndex] };
+                
+                currentForm.selectedStartDate = dateString;
+                
+                updatedForms[currentIndex] = currentForm;
+                setEventForms(updatedForms);
+              }
+            }}
             minimumDate={new Date()}
           />
         )}
@@ -720,7 +898,25 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
             value={new Date(eventForms[currentIndex].selectedEndDate || eventForms[currentIndex].selectedStartDate || new Date())}
             mode="date"
             display="default"
-            onChange={handleEndDateChange}
+            onChange={(event, selectedDate) => {
+              setShowEndDatePicker(false);
+              setShowCalendarModal(false);
+              if (selectedDate) {
+                const currentForm = eventForms[currentIndex];
+                if (new Date(currentForm.selectedStartDate) > selectedDate) {
+                  Alert.alert('Error', 'End date cannot be before start date');
+                  return;
+                }
+                
+                const dateString = selectedDate.toISOString().split('T')[0];
+                const updatedForms = [...eventForms];
+                updatedForms[currentIndex] = {
+                  ...currentForm,
+                  selectedEndDate: dateString
+                };
+                setEventForms(updatedForms);
+              }
+            }}
             minimumDate={new Date(eventForms[currentIndex].selectedStartDate || new Date())}
           />
         )}
@@ -739,7 +935,23 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
               <Text style={styles.modalTitle}>Select Start Time</Text>
               {renderTimePicker(
                 eventForms[currentIndex].startTime,
-                handleStartTimeChange,
+                (event, selectedTime) => {
+                  setShowStartTimeModal(false);
+                  const updatedForms = [...eventForms];
+                  const currentForm = { ...updatedForms[currentIndex] };
+                  
+                  currentForm.startTime = selectedTime;
+                  
+                  // Ensure end time is after start time
+                  if (selectedTime >= currentForm.endTime) {
+                    const newEndTime = new Date(selectedTime);
+                    newEndTime.setHours(selectedTime.getHours() + 1);
+                    currentForm.endTime = newEndTime;
+                  }
+                  
+                  updatedForms[currentIndex] = currentForm;
+                  setEventForms(updatedForms);
+                },
                 () => setShowStartTimeModal(false)
               )}
             </View>
@@ -760,7 +972,23 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
               <Text style={styles.modalTitle}>Select End Time</Text>
               {renderTimePicker(
                 eventForms[currentIndex].endTime,
-                handleEndTimeChange,
+                (event, selectedTime) => {
+                  setShowEndTimeModal(false);
+                  const updatedForms = [...eventForms];
+                  const currentForm = { ...updatedForms[currentIndex] };
+                  
+                  currentForm.endTime = selectedTime;
+                  
+                  // Ensure end time is after start time
+                  if (selectedTime <= currentForm.startTime) {
+                    const newEndTime = new Date(selectedTime);
+                    newEndTime.setHours(selectedTime.getHours() + 1);
+                    currentForm.endTime = newEndTime;
+                  }
+                  
+                  updatedForms[currentIndex] = currentForm;
+                  setEventForms(updatedForms);
+                },
                 () => setShowEndTimeModal(false)
               )}
             </View>
@@ -782,7 +1010,9 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
                 Select {currentField === 'start' ? 'Start' : 'End'} Date
               </Text>
               <CalendarPicker
-                onDateChange={handleCalendarDayPress}
+                onDateChange={(selectedDate) => {
+                  handleCalendarDayPress(selectedDate);
+                }}
                 minDate={new Date()}
                 selectedDayColor="#fada5e"
                 selectedDayTextColor="#000"
@@ -815,11 +1045,217 @@ export default function EventFormScreen({ startDate, endDate, onSave, events, ev
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    padding: 16,
     backgroundColor: '#fff',
   },
-  form: {
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  formCard: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 12,
     padding: 16,
-    gap: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  titleContainer: {
+    marginBottom: 16,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  dateTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    justifyContent: 'space-between',
+  },
+  dateTimeLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+    width: 100,
+  },
+  datePickerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+  },
+  timePickerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+  },
+  dateInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+  },
+  timeText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  calendarIcon: {
+    marginLeft: 8,
+  },
+  clockIcon: {
+    marginLeft: 8,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  optionLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#333',
+  },
+  optionValue: {
+    fontSize: 16,
+    color: '#666',
+  },
+  saveButtonContainer: {
+    marginTop: 24,
+    marginBottom: 40,
+  },
+  saveButton: {
+    backgroundColor: '#efc800',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  removeEventButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+  },
+  closeIconContainer: {
+    backgroundColor: '#f4f4f4',
+    borderRadius: 20,
+    padding: 5,
+  },
+  createNewEventContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+  },
+  createNewEventText: {
+    color: '#000',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  webSelectContainer: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+  },
+  pickerItem: {
+    marginVertical: 4,
+    padding: 12,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+  },
+  pickerText: {
+    fontSize: 16,
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  timePicker: {
+    height: 200,
+    width: '100%',
+  },
+  modalButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  confirmButton: {
+    backgroundColor: '#efc800',
+    borderColor: '#efc800',
+  },
+  cancelButton: {
+    backgroundColor: '#fff',
+  },
+  confirmButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  cancelButtonText: {
+    color: '#333',
+  },
+  calendarModal: {
+    flex: 1,
+    backgroundColor: 'white',
+    padding: 20,
+  },
+  calendarContainer: {
+    marginBottom: 20,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  calendarTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    padding: 8,
   },
   eventFormContainer: {
     borderWidth: 1,
@@ -829,24 +1265,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     position: 'relative',
   },
-  removeEventButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 1,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ffeeee',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   label: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -855,109 +1273,6 @@ const styles = StyleSheet.create({
   },
   formRow: {
     marginBottom: 16,
-  },
-  inlineLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    width: 60,
-    alignSelf: 'center',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  dateTimeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-    gap: 12,
-    alignItems: 'center',
-  },
-  dateTimeInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  dateText: {
-    fontSize: 16,
-    color: '#333',
-    flex: 1,
-    padding: 0,
-  },
-  timeText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    width: '80%',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  calendarModalContent: {
-    width: '90%',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  timePickerContainer: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  timePicker: {
-    width: '100%',
-    height: 200,
-  },
-  confirmButton: {
-    backgroundColor: '#2196F3',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    width: '100%',
-    marginTop: 16,
-  },
-  confirmButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
   dropdownSelector: {
     borderWidth: 1,
@@ -982,6 +1297,67 @@ const styles = StyleSheet.create({
   picker: {
     width: '100%',
   },
+  alarmSwitchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  alarmSwitchLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  alarmSwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flex: 1,
+    marginLeft: 10,
+  },
+  alarmOptionsText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  alarmOptionsList: {
+    maxHeight: 200,
+    width: '100%',
+    paddingTop: 10,
+    paddingBottom: 10,
+    marginBottom: 0,
+  },
+  alarmOptionItem: {
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 8,
+  },
+  selectedAlarmOption: {
+    backgroundColor: '#e0e0e0',
+    borderColor: '#efc800',
+    borderWidth: 2,
+  },
+  alarmOptionText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  closeIconButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    padding: 8,
+    borderRadius: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
   createButton: {
     backgroundColor: '#2196F3',
     padding: 16,
@@ -1000,26 +1376,27 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  createNewEventText: {
-    color: '#2196F3',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  createNewEventContainer: {
-    flexDirection: 'row',
+  calendarModalContent: {
+    width: '90%',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#2196F3',
-    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
-  webSelectContainer: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    overflow: 'hidden',
+  confirmButton: {
+    backgroundColor: '#efc800',
+    borderColor: '#efc800',
   },
-}); 
+  confirmButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+});

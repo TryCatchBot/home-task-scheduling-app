@@ -1,7 +1,6 @@
 {
   "expo": {
     "name": "HomeTask",
-    "displayName": "HomeTask",
     "slug": "calendar-reschedule",
     "version": "1.0.0",
     "orientation": "portrait",

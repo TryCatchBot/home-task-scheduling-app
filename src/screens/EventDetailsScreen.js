@@ -1,32 +1,24 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { isPastDate, formatAlarmSetting, formatDateToFriendly } from '../utils/eventUtils';
 import { AntDesign, MaterialIcons, Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
-export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicate, onAddNewEvent }) {
+export default function EventDetailsScreen({ event, onDelete, onDuplicate, onAddNewEvent, onClose }) {
   if (!event) {
     return (
-      <View style={styles.containerWrapper}>
+      <SafeAreaView style={styles.containerWrapper}>
         <View style={styles.container}>
           <Text style={styles.errorText}>No event data available</Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
   
   const isPast = isPastDate(event.date);
   const [showMenu, setShowMenu] = useState(false);
-
-  const handleEdit = () => {
-    if (isPast) {
-      Alert.alert('Error', 'Cannot edit past events');
-      return;
-    }
-    
-    if (onEdit) {
-      onEdit(event);
-    }
-  };
+  const router = useRouter();
 
   const handleDelete = () => {
     Alert.alert(
@@ -40,6 +32,10 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
           onPress: () => {
             if (onDelete) {
               onDelete(event.id, event.date);
+              // Explicitly call onClose to close the modal after deletion
+              if (onClose) {
+                onClose();
+              }
             }
           }
         }
@@ -47,15 +43,38 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
     );
   };
 
-  const handleDuplicate = () => {
-    if (onDuplicate) {
-      onDuplicate(event);
+  const handleEdit = () => {
+    // Close the menu
+    setShowMenu(false);
+    
+    // Call onClose to close the details modal first
+    if (onClose) {
+      onClose();
     }
+    
+    // Navigate to the edit event screen with the event data
+    router.push({
+      pathname: '/newEvent',
+      params: {
+        event: JSON.stringify(event),
+        date: event.date,
+        isEditing: 'true'
+      }
+    });
   };
 
   const handleAddNewEvent = () => {
     if (onAddNewEvent) {
       onAddNewEvent();
+      // Also close this screen when adding a new event
+      if (onClose) {
+        onClose();
+      }
+    } else {
+      // If no callback is provided, use the router to navigate
+      if (router) {
+        router.push('/new');
+      }
     }
   };
 
@@ -90,7 +109,19 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
   };
 
   return (
-    <View style={styles.containerWrapper}>
+    <SafeAreaView style={styles.containerWrapper}>
+      {/* Header with back button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={onClose}
+        >
+          <AntDesign name="arrowleft" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Event Details</Text>
+        <View style={styles.headerRight} />
+      </View>
+      
       <ScrollView style={styles.container}>
         <View style={[styles.card, isPast && styles.pastCard, { borderLeftColor: getEventColor(), borderLeftWidth: 5 }]}>
           <View style={styles.titleRow}>
@@ -157,6 +188,8 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
         <AntDesign name="plus" size={24} color="#000" />
       </TouchableOpacity>
 
+       
+
       {/* Menu Modal */}
       <Modal
         transparent={true}
@@ -171,43 +204,49 @@ export default function EventDetailsScreen({ event, onEdit, onDelete, onDuplicat
         >
           <View style={styles.menuContainer}>
             {!isPast && (
+              <>
+                <TouchableOpacity 
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    handleEdit();
+                  }}
+                >
+                  <MaterialIcons name="edit" size={20} color="#2196F3" />
+                  <Text style={styles.menuItemText}>Edit Event</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    handleDelete();
+                  }}
+                >
+                  <MaterialIcons name="delete" size={20} color="#ff4444" />
+                  <Text style={styles.menuItemText}>Delete Event</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            
+            {onDuplicate && (
               <TouchableOpacity 
                 style={styles.menuItem}
                 onPress={() => {
                   setShowMenu(false);
-                  handleEdit();
+                  onDuplicate(event);
                 }}
               >
-                <MaterialIcons name="edit" size={20} color="#2196F3" />
-                <Text style={styles.menuItemText}>Edit Event</Text>
+                <Feather name="copy" size={20} color="#2196F3" />
+                <Text style={styles.menuItemText}>Duplicate Event</Text>
               </TouchableOpacity>
             )}
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                handleDuplicate();
-              }}
-            >
-              <MaterialCommunityIcons name="content-duplicate" size={20} color="#16A085" />
-              <Text style={styles.menuItemText}>Duplicate Event</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                handleDelete();
-              }}
-            >
-              <MaterialIcons name="delete" size={20} color="#ff4444" />
-              <Text style={styles.menuItemText}>Delete Event</Text>
-            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+
+
+    </SafeAreaView>
   );
 }
 
@@ -220,6 +259,27 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
     padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9f9f9',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+  },
+  headerRight: {
+    width: 40, // Match the width of the back button for proper centering
+  },
+  backButton: {
+    padding: 8,
   },
   card: {
     backgroundColor: '#f5f5f5',
@@ -272,15 +332,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   pastText: {
-    color: '#888',
+    color: '#777',
   },
   statusText: {
-    fontWeight: 'bold',
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 12,
+    fontWeight: '600',
+    borderRadius: 4,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
     overflow: 'hidden',
-    alignSelf: 'flex-start',
   },
   activeStatusText: {
     color: '#34A853',
@@ -290,6 +349,12 @@ const styles = StyleSheet.create({
     color: '#EA4335',
     backgroundColor: 'rgba(234, 67, 53, 0.1)',
   },
+  errorText: {
+    fontSize: 16,
+    color: '#EA4335',
+    textAlign: 'center',
+    marginTop: 20,
+  },
   addButton: {
     position: 'absolute',
     right: 20,
@@ -297,51 +362,43 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    // backgroundColor: '#dcdcdc',
-    backgroundColor: '#efcc00',
+    backgroundColor: '#fada5e',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   menuOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-    zIndex: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   menuContainer: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    padding: 16,
-    elevation: 5,
+    borderRadius: 12,
+    padding: 8,
+    width: '80%',
+    maxWidth: 300,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    zIndex: 1001,
+    elevation: 5,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    zIndex: 1002,
   },
   menuItemText: {
     fontSize: 16,
-    marginLeft: 16,
+    marginLeft: 12,
     color: '#333',
-  },
-  errorText: {
-    fontSize: 18,
-    color: '#666',
-    textAlign: 'center',
-    marginTop: 50,
   },
 }); 

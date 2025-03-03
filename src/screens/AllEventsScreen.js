@@ -1,336 +1,271 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Platform, ToastAndroid } from 'react-native';
-import { isPastDate, RepeatOptions, formatDateToFriendly } from '../utils/eventUtils';
-import { AntDesign, Entypo } from '@expo/vector-icons';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Platform } from 'react-native';
+import { AntDesign, MaterialIcons } from '@expo/vector-icons';
+import { isPastDate, formatDateToFriendly } from '../utils/eventUtils';
+import { useRouter } from 'expo-router';
 
-// Toast function that works on both iOS and Android
-const showToast = (message) => {
-  if (Platform.OS === 'android') {
-    ToastAndroid.show(message, ToastAndroid.SHORT);
-  } else {
-    // For iOS, we'll use Alert as a simple alternative
-    Alert.alert('Success', message, [{ text: 'OK' }], { cancelable: true });
-  }
-};
-
-export default function AllEventsScreen({ events = [], router, onEventDetails, onEditEvent, onAddNewEvent }) {
-  const [selectedFilter, setSelectedFilter] = useState('all');
-  const [filteredEvents, setFilteredEvents] = useState([]);
-  const [openMenuId, setOpenMenuId] = useState(null); // Track which menu is open
-
+export default function AllEventsScreen({ events, router, onEventDetails, onAddNewEvent, onDeleteEvent }) {
+  const [groupedEvents, setGroupedEvents] = useState({});
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [pastEvents, setPastEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [showPastEvents, setShowPastEvents] = useState(false);
+  
+  // Process and group events by date and category (upcoming/past)
   useEffect(() => {
-    // If events provided directly, use those
-    filterEvents(selectedFilter);
-  }, [selectedFilter, events]);
-
-  const filterEvents = (filter) => {
-    let eventsToFilter = [...events];
+    console.log("AllEventsScreen received events:", 
+      Array.isArray(events) ? events.length : typeof events);
     
-    // First filter by repeat type if needed
-    if (filter !== 'all') {
-      eventsToFilter = eventsToFilter.filter(event => event.repeat === filter);
+    if (!Array.isArray(events)) {
+      console.error("Events is not an array:", events);
+      setUpcomingEvents([]);
+      setPastEvents([]);
+      return;
     }
     
-    // Sort events: upcoming events first, then past events
-    eventsToFilter.sort((a, b) => {
-      const isAPast = isPastDate(a.date);
-      const isBPast = isPastDate(b.date);
+    // Group events by date
+    const grouped = {};
+    const upcoming = [];
+    const past = [];
+    
+    // Process all events into appropriate categories
+    events.forEach(event => {
+      if (!event) {
+        console.warn("Skipping undefined event");
+        return;
+      }
       
-      // If one is past and one is upcoming, prioritize the upcoming one
-      if (isAPast && !isBPast) return 1;  // A is past, B is upcoming, so B comes first
-      if (!isAPast && isBPast) return -1; // A is upcoming, B is past, so A comes first
+      if (!event.date) {
+        console.warn("Event missing date property:", event);
+        return;
+      }
       
-      // If both are of the same type (both past or both upcoming), sort by date
-      const dateA = new Date(`${a.date}T${a.startTime}`);
-      const dateB = new Date(`${b.date}T${b.startTime}`);
-      return dateA - dateB;
+      const isPast = isPastDate(event.date);
+      
+      // Add to grouped by date
+      if (!grouped[event.date]) {
+        grouped[event.date] = [];
+      }
+      grouped[event.date].push(event);
+      
+      // Add to upcoming or past arrays
+      if (isPast) {
+        past.push(event);
+      } else {
+        upcoming.push(event);
+      }
     });
     
-    setFilteredEvents(eventsToFilter);
-  };
-
-  const handleEditEvent = (event) => {
-    if (isPastDate(event.date)) {
-      Alert.alert('Error', 'Cannot edit past events');
-      return;
-    }
+    // Sort upcoming events by date (earliest first)
+    upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
     
-    if (onEditEvent) {
-      onEditEvent(event);
-    }
-  };
-
-  const handleDeleteEvent = (event) => {
-    if (router) {
-      router.replace({
-        pathname: '/',
-        params: {
-          deleteEvent: 'true',
-          eventId: event.id,
-          eventDate: event.date
-        }
-      });
-    }
-  };
-
-  const handleDuplicateEvent = async (event) => {
-    // Create a new event object based on the original event
-    const newEvent = {
-      ...event,
-      title: `${event.title} (Copy)`, // Add (Copy) to differentiate
-      id: undefined, // This will be generated in handleEventSave
-    };
+    // Sort past events by date (most recent first)
+    past.sort((a, b) => new Date(b.date) - new Date(a.date));
     
-    // Check if this is a past event
-    if (isPastDate(event.date)) {
-      // If duplicating a past event, set it to start from today
-      Alert.alert(
-        'Duplicate to Current Date',
-        'This is a past event. Do you want to duplicate it to today?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel',
-          },
-          {
-            text: 'OK',
-            onPress: async () => {
-              const today = new Date().toISOString().split('T')[0];
-              
-              if (router) {
-                router.replace({
-                  pathname: '/',
-                  params: {
-                    duplicateEvent: JSON.stringify(newEvent),
-                    eventDate: today
-                  }
-                });
-              }
-            },
-          },
-        ]
-      );
-    } else {
-      // If it's a current or future event, keep the same date
-      if (router) {
-        router.replace({
-          pathname: '/',
-          params: {
-            duplicateEvent: JSON.stringify(newEvent),
-            eventDate: event.date
-          }
-        });
-      }
-    }
+    console.log(`Grouped events: upcoming=${upcoming.length}, past=${past.length}`);
     
-    // Show success toast
-    showToast(`Event "${event.title}" duplicated successfully!`);
-  };
-
-  const handleAddNewEvent = () => {
-    if (onAddNewEvent) {
-      onAddNewEvent();
-    } else if (router) {
-      router.push('/');
-    }
-  };
-
+    setGroupedEvents(grouped);
+    setUpcomingEvents(upcoming);
+    setPastEvents(past);
+  }, [events]);
+  
   const handleEventPress = (event) => {
-    if (openMenuId) {
-      setOpenMenuId(null);
-      return;
-    }
-    
+    setSelectedEventId(event.id);
     if (onEventDetails) {
       onEventDetails(event);
     }
   };
-
-  const renderEventCard = ({ item }) => {
-    const isPast = isPastDate(item.date);
-    const isMenuOpen = openMenuId === item.id;
-    
-    // Get color for the event
-    const getEventColor = () => {
-      // Add defense for undefined id
-      if (!item || !item.id) {
-        return '#4285F4'; // Default blue
-      }
-      
-      const index = Math.abs(item.id.split('-')[0]) % 10;
-      const badgeColors = [
-        '#4285F4', // Blue
-        '#EA4335', // Red
-        '#34A853', // Green
-        '#FBBC05', // Yellow
-        '#8F44AD', // Purple
-        '#16A085', // Teal
-        '#F39C12', // Orange
-        '#27AE60', // Emerald
-        '#E74C3C', // Crimson
-        '#3498DB', // Sky Blue
-      ];
-      return badgeColors[index];
-    };
-    
-    const eventColor = getEventColor();
-    
-    return (
-      <View style={[
-        styles.eventCard, 
-        isPast && styles.pastEventCard,
-        { borderLeftColor: eventColor, borderLeftWidth: 4 }
-      ]}>
-        {isMenuOpen && (
-          <TouchableOpacity 
-            style={styles.menuBackdrop} 
-            onPress={() => setOpenMenuId(null)}
-            activeOpacity={0}
-          />
-        )}
-        
-        <TouchableOpacity
-          style={styles.eventContent}
-          onPress={() => {
-            if (!isMenuOpen) {
-              handleEventPress(item);
+  
+  const handleDeleteEvent = (eventId, date) => {
+    Alert.alert(
+      'Delete Event',
+      'Are you sure you want to delete this event?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (onDeleteEvent) {
+              onDeleteEvent(eventId, date);
             }
-          }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.titleContainer}>
-            <Text style={[styles.eventTitle, isPast && styles.pastEventText]} numberOfLines={1} ellipsizeMode="tail">
-              {item.title}
-            </Text>
-            <TouchableOpacity 
-              onPress={(e) => {
-                e.stopPropagation(); // Prevent triggering the parent's onPress
-                setOpenMenuId(isMenuOpen ? null : item.id);
-              }}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={styles.kebabMenu}
-            >
-              <Entypo name="dots-three-vertical" size={22} color={isPast ? "#888" : "#666"} />
-            </TouchableOpacity>
-          </View>
-          
-          {isMenuOpen && (
-            <View style={styles.menuDropdown}>
-              {!isPast && (
-                <TouchableOpacity 
-                  style={styles.menuItem}
-                  onPress={() => {
-                    setOpenMenuId(null);
-                    handleEditEvent(item);
-                  }}
-                >
-                  <AntDesign name="edit" size={16} color="#2196F3" />
-                  <Text style={styles.menuItemText}>Edit</Text>
-                </TouchableOpacity>
-              )}
-              
-              <TouchableOpacity 
-                style={styles.menuItem}
-                onPress={() => {
-                  setOpenMenuId(null);
-                  handleDeleteEvent(item);
-                }}
-              >
-                <AntDesign name="delete" size={16} color="#ff4444" />
-                <Text style={styles.menuItemText}>Delete</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.menuItem, { borderBottomWidth: 0 }]}
-                onPress={() => {
-                  setOpenMenuId(null);
-                  handleDuplicateEvent(item);
-                }}
-              >
-                <AntDesign name="copy1" size={16} color="#16A085" />
-                <Text style={styles.menuItemText}>Duplicate</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-         
-          <View style={styles.eventDetailRow}>
-            <AntDesign name="calendar" size={14} color={isPast ? "#888" : "#666"} style={styles.eventIcon} />
-            <Text style={[styles.eventTime, isPast && styles.pastEventText]}>
-              {formatDateToFriendly(item.date)}
-            </Text>
-          </View>
-          
-          <View style={styles.eventDetailRow}>
-            <AntDesign name="clockcircleo" size={14} color={isPast ? "#888" : "#666"} style={styles.eventIcon} />
-            <Text style={[styles.eventTime, isPast && styles.pastEventText]}>
-              {item.startTime} - {item.endTime}
-            </Text>
-          </View>
-          
-          <View style={styles.eventDetailRow}>
-            <AntDesign name="reload1" size={14} color={isPast ? "#888" : "#666"} style={styles.eventIcon} />
-            <Text style={[styles.eventRepeat, isPast && styles.pastEventText]}>
-              {item.repeat.charAt(0).toUpperCase() + item.repeat.slice(1)}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+          }
+        }
+      ]
     );
   };
-
+  
+  const handleEditEvent = (event) => {
+    // Use event data for editing
+    // Use router if available, otherwise use the onEventDetails function
+    if (router) {
+      // Navigate to newEvent instead of editEvent
+      router.push({
+        pathname: '/newEvent',
+        params: {
+          event: JSON.stringify(event),
+          date: event.date || new Date().toISOString().split('T')[0],
+          isEditing: 'true'
+        }
+      });
+    } else if (onEventDetails) {
+      // If router is not available, show event details
+      onEventDetails(event);
+    }
+  };
+  
+  const renderEventItem = ({ item }) => {
+    const isPast = isPastDate(item.date);
+    
+    return (
+      <TouchableOpacity
+        style={[
+          styles.eventItem,
+          isPast && styles.pastEventItem,
+          selectedEventId === item.id && styles.selectedEventItem
+        ]}
+        onPress={() => handleEventPress(item)}
+      >
+        <View style={styles.eventContent}>
+          {/* Color dot marker for the event */}
+          <View 
+            style={[
+              styles.eventDot, 
+              { backgroundColor: getEventColor(item.id) }
+            ]} 
+          />
+          
+          <View style={styles.eventTextContainer}>
+            <Text style={[styles.eventTitle, isPast && styles.pastEventText]} numberOfLines={1}>
+              {item.title || "Untitled Event"}
+            </Text>
+            
+            <Text style={[styles.eventDate, isPast && styles.pastEventText]}>
+              {formatDateToFriendly(item.date)}
+              {item.startTime && item.endTime ? 
+                ` · ${item.startTime.substring(0, 5)} - ${item.endTime.substring(0, 5)}` : 
+                item.startTime ? ` · ${item.startTime.substring(0, 5)}` : ''}
+            </Text>
+          </View>
+          
+          <View style={styles.eventActions}>
+            {!isPast && (
+              <>
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => handleEditEvent(item)}
+                >
+                  <MaterialIcons name="edit" size={22} color="#2196F3" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={styles.actionButton}
+                  onPress={() => handleDeleteEvent(item.id, item.date)}
+                >
+                  <MaterialIcons name="delete" size={22} color="#ff4444" />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  
+  // Helper function to get a color for an event based on its ID
+  const getEventColor = (eventId) => {
+    if (!eventId) return '#4285F4'; // Default blue
+    
+    const badgeColors = [
+      '#4285F4', // Blue
+      '#EA4335', // Red
+      '#34A853', // Green
+      '#FBBC05', // Yellow
+      '#8F44AD', // Purple
+      '#16A085', // Teal
+      '#F39C12', // Orange
+      '#27AE60', // Emerald
+      '#E74C3C', // Crimson
+      '#3498DB', // Sky Blue
+    ];
+    
+    const idPart = eventId.split('-')[0];
+    const index = Math.abs(parseInt(idPart) || 0) % badgeColors.length;
+    return badgeColors[index];
+  };
+  
+  const renderSectionHeader = (title, count) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text style={styles.eventCount}>{count} events</Text>
+    </View>
+  );
+  
   return (
     <View style={styles.container}>
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tab, selectedFilter === 'all' && styles.activeTab]}
-          onPress={() => setSelectedFilter('all')}
-        >
-          <Text style={[styles.tabText, selectedFilter === 'all' && styles.activeTabText]}>All</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, selectedFilter === RepeatOptions.WEEKLY && styles.activeTab]}
-          onPress={() => setSelectedFilter(RepeatOptions.WEEKLY)}
-        >
-          <Text style={[styles.tabText, selectedFilter === RepeatOptions.WEEKLY && styles.activeTabText]}>Weekly</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, selectedFilter === RepeatOptions.BIWEEKLY && styles.activeTab]}
-          onPress={() => setSelectedFilter(RepeatOptions.BIWEEKLY)}
-        >
-          <Text style={[styles.tabText, selectedFilter === RepeatOptions.BIWEEKLY && styles.activeTabText]}>Bi-Weekly</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, selectedFilter === RepeatOptions.MONTHLY && styles.activeTab]}
-          onPress={() => setSelectedFilter(RepeatOptions.MONTHLY)}
-        >
-          <Text style={[styles.tabText, selectedFilter === RepeatOptions.MONTHLY && styles.activeTabText]}>Monthly</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, selectedFilter === RepeatOptions.NONE && styles.activeTab]}
-          onPress={() => setSelectedFilter(RepeatOptions.NONE)}
-        >
-          <Text style={[styles.tabText, selectedFilter === RepeatOptions.NONE && styles.activeTabText]}>None</Text>
-        </TouchableOpacity>
-      </View>
-
-      {filteredEvents.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No events found</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredEvents}
-          renderItem={renderEventCard}
-          keyExtractor={(item) => item.id ? String(item.id) : `event-${item.date}-${item.startTime}`}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+      <FlatList
+        data={upcomingEvents.length > 0 ? upcomingEvents : []}
+        renderItem={renderEventItem}
+        keyExtractor={item => item.id || `temp-${Math.random()}`}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No upcoming events</Text>
+            <TouchableOpacity 
+              style={styles.addEventButton}
+              onPress={onAddNewEvent}
+            >
+              <Text style={styles.addEventButtonText}>+ Add New Event</Text>
+            </TouchableOpacity>
+          </View>
+        }
+        ListHeaderComponent={
+          upcomingEvents.length > 0 && 
+          renderSectionHeader('Upcoming Events', upcomingEvents.length)
+        }
+        ListFooterComponent={
+          <>
+            {pastEvents.length > 0 && (
+              <>
+                <TouchableOpacity 
+                  style={styles.pastEventsToggle}
+                  onPress={() => setShowPastEvents(!showPastEvents)}
+                >
+                  <Text style={styles.pastEventsToggleText}>
+                    {showPastEvents ? 'Hide Past Events' : `Show Past Events (${pastEvents.length})`}
+                  </Text>
+                  <MaterialIcons 
+                    name={showPastEvents ? 'keyboard-arrow-up' : 'keyboard-arrow-down'} 
+                    size={24} 
+                    color="#666" 
+                  />
+                </TouchableOpacity>
+                
+                {showPastEvents && (
+                  <>
+                    {renderSectionHeader('Past Events', pastEvents.length)}
+                    {pastEvents.map(item => (
+                      <View key={item.id} style={styles.pastEventWrapper}>
+                        {renderEventItem({ item })}
+                      </View>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+            <View style={styles.footer} />
+          </>
+        }
+      />
       
+      {/* Floating add button */}
       <TouchableOpacity 
         style={styles.addButton}
-        onPress={handleAddNewEvent}
+        onPress={onAddNewEvent}
       >
-        <AntDesign name="plus" size={24} color="#fff" />
+        <View style={styles.addButtonContent}>
+          <Text style={styles.addButtonText}>Add Event</Text>
+          <AntDesign name="plus" size={24} color="#000" />
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -339,160 +274,152 @@ export default function AllEventsScreen({ events = [], router, onEventDetails, o
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
   },
-  tabContainer: {
+  sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    padding: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
-    backgroundColor: '#f9f9f9',
-    paddingVertical: 5,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginHorizontal: 2,
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#fada5e',
-    backgroundColor: '#fff',
-  },
-  tabText: {
-    color: '#666',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  activeTabText: {
-    color: '#000',
-    fontWeight: 'bold',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: {
+  sectionTitle: {
     fontSize: 16,
-    color: '#888',
-    fontStyle: 'italic',
+    fontWeight: '600',
+    color: '#333',
   },
-  listContent: {
-    padding: 16,
-    paddingBottom: 80, // Add padding for the floating button
+  eventCount: {
+    fontSize: 14,
+    color: '#666',
   },
-  eventCard: {
-    backgroundColor: '#f5f5f5',
+  eventItem: {
+    backgroundColor: '#fff',
     borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    padding: 12,
+    marginHorizontal: 16,
+    marginVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4285F4',
   },
-  pastEventCard: {
-    backgroundColor: '#e0e0e0',
+  pastEventItem: {
+    backgroundColor: '#f5f5f5',
+    borderLeftColor: '#999',
   },
-  pastEventText: {
-    color: '#888',
+  selectedEventItem: {
+    backgroundColor: '#e6f2ff',
   },
   eventContent: {
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  eventTextContainer: {
     flex: 1,
   },
   eventTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: '#333',
     marginBottom: 4,
   },
-  eventTime: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
-  },
-  eventRepeat: {
+  eventDate: {
     fontSize: 14,
     color: '#666',
   },
-  eventDetailRow: {
+  pastEventText: {
+    color: '#888',
+  },
+  eventActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
+    justifyContent: 'flex-end',
+    paddingLeft: 8,
   },
-  eventIcon: {
-    marginRight: 6,
-    width: 16,
+  actionButton: {
+    padding: 8,
+    marginLeft: 4,
   },
-  titleContainer: {
+  pastEventsToggle: {
     flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  kebabMenu: {
-    padding: 4,
-    zIndex: 95, // Higher than backdrop but lower than dropdown
-  },
-  menuBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'transparent',
-    zIndex: 90, // Make it higher than other elements but lower than dropdown
-  },
-  menuDropdown: {
-    position: 'absolute',
-    top: 35,
-    right: 5,
-    backgroundColor: '#fff',
-    borderRadius: 10, 
-    padding: 4,
-    paddingBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-    zIndex: 99, // Increase zIndex to ensure it's above other content
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    width: 160,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f0f0f0',
+    borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderColor: '#e0e0e0',
+    marginTop: 8,
   },
-  menuItemText: {
-    marginLeft: 10,
-    fontSize: 15,
-    color: '#333',
+  pastEventsToggleText: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 8,
+  },
+  pastEventWrapper: {
+    opacity: 0.8,
+  },
+  footer: {
+    height: 80, // Space for the floating button
   },
   addButton: {
     position: 'absolute',
     right: 20,
     bottom: 20,
-    width: 56,
+    minWidth: 140, // Make it wider to accommodate text
     height: 56,
     borderRadius: 28,
     backgroundColor: '#fada5e',
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
+    elevation: 8,
+    zIndex: 9999, // Increase z-index to ensure visibility
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 3,
+    shadowRadius: 4,
+    paddingHorizontal: 20, // Add padding for the content
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 30,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 16,
+  },
+  addEventButton: {
+    backgroundColor: '#fada5e',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+  },
+  addEventButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  addButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between', // Space between text and icon
   },
   addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  }
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginRight: 8,
+  },
 }); 
