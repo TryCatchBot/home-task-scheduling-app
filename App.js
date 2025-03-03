@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { Redirect } from 'expo-router';
 
-// We're using expo-router now, so this file redirects to the expo-router entry point
+// This is a fallback for direct App.js access, but Expo Router entry will be used instead
 export default function App() {
   return <Redirect href="/" />;
 }

@@ -1,5 +1,5 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 import { getAlarmTime } from './eventUtils';
 
 // Configure notifications
@@ -92,4 +92,31 @@ export const setupNotificationListener = (navigation) => {
   });
   
   return subscription;
-}; 
+};
+
+// Function to set up notification permissions
+export async function setupNotifications() {
+  try {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    
+    if (finalStatus !== 'granted') {
+      Alert.alert(
+        'Permission Denied',
+        'You need to enable notifications permission to set alarms for events.',
+        [{ text: 'OK' }]
+      );
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error setting up notifications:', error);
+    return false;
+  }
+} 

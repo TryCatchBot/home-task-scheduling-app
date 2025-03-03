@@ -23,7 +23,12 @@ export const AlarmOptions = {
 // Save events to local storage
 export const saveEvents = async (events) => {
   try {
+    console.log("Saving events to AsyncStorage:", {
+      dateKeys: Object.keys(events).length,
+      totalEvents: Object.values(events).flat().length
+    });
     await AsyncStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
+    console.log("Events saved successfully");
   } catch (error) {
     console.error('Error saving events:', error);
   }
@@ -33,7 +38,20 @@ export const saveEvents = async (events) => {
 export const loadEvents = async () => {
   try {
     const eventsJson = await AsyncStorage.getItem(EVENTS_STORAGE_KEY);
-    return eventsJson ? JSON.parse(eventsJson) : {};
+    console.log("Loading events from AsyncStorage");
+    
+    if (!eventsJson) {
+      console.log("No events found in storage");
+      return {};
+    }
+    
+    const parsedEvents = JSON.parse(eventsJson);
+    console.log("Events loaded from storage:", {
+      dateKeys: Object.keys(parsedEvents).length,
+      totalEvents: Object.values(parsedEvents).flat().length
+    });
+    
+    return parsedEvents;
   } catch (error) {
     console.error('Error loading events:', error);
     return {};
@@ -138,7 +156,7 @@ export const hasTimeConflict = (events, newEvent, date, excludeEventId = null) =
   const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000); // Assuming 1-hour events
 
   return dateEvents.some(event => {
-    // Skip the event we're editing (if provided)
+    // Skip the event we're updating (if provided)
     if (excludeEventId && event.id === excludeEventId) return false;
     
     const eventTime = event.startTime || event.time; // Handle different naming
